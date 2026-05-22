@@ -71,10 +71,26 @@ ollama pull jeffgreen311/eve-qwen3.5-4b-S0LF0RG3:latest
 ```bash
 git clone https://github.com/JeffGreen311/eve-agent-v2-unleashed.git
 cd eve-agent-v2-unleashed
-python -m venv venv && venv\Scripts\activate   # Windows
-# source venv/bin/activate                     # Linux/macOS
+
+# Windows
+python -m venv venv && venv\Scripts\activate
+
+# Linux / macOS
+python3 -m venv venv && source venv/bin/activate
+
 pip install fastapi uvicorn ollama httpx pydantic-settings python-dotenv aiohttp rich psutil pyyaml
 ```
+
+**Linux / macOS Quick Start:**
+```bash
+git clone https://github.com/JeffGreen311/eve-agent-v2-unleashed.git
+cd eve-agent-v2-unleashed
+python3 -m venv venv && source venv/bin/activate
+pip install fastapi uvicorn ollama httpx pydantic-settings python-dotenv aiohttp rich psutil pyyaml
+python3 eve_server.py
+```
+
+Then open **http://localhost:7777** in your browser.
 
 ### 3 — Launch
 
