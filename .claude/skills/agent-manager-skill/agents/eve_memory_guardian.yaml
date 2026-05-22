@@ -1,0 +1,4 @@
+name: "Eve's Memory Guardian"
+description: "Monitors Brain v3 memory for critical insights"
+command: "python3 eve_memory_guardian.py"
+schedule: "*/5 * * * *"

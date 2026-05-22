@@ -1,0 +1,63 @@
+# Local secrets — never commit
+.env
+.env.local
+.env.local-backup
+.env.*.local
+user_keys.json
+
+# OpenClaw agent auth profiles (contains live OAuth tokens)
+.openclaw-agent/auth-profiles.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+*.egg
+
+# Local data / state
+eve_data/
+chroma_eve_memories/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node / frontend build (if any)
+node_modules/
+*.tsbuildinfo
+dist/
+
+# Large model artifacts (users pull these from Ollama)
+*.gguf
+*.safetensors
+
+# Debug / scratch output files
+output.txt
+plan.txt
+result.txt
+*.lyrics.txt
+*_lyrics.txt
+
+# Root-level PNGs are duplicates of web/assets/ — exclude to avoid bloat
+/*.png
+
+# Large sprite sheet exports and unused ComfyUI outputs in web/assets/
+web/assets/sprite_sheet_spritesheet_*.png
+web/assets/ComfyUI_00148_.png
+web/assets/[1-4].png
+
+# Backup env files
+*.backup
+.env.*-backup

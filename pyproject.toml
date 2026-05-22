@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eve-agent"
+version = "0.1.0"
+description = "Eve Agent - The AI Agent With a Soul. Autonomous AI with persistent memory, genuine personality, emotional intelligence, and real-world task execution."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "S0LF0RG3", email = "solforge@proton.me"}
+]
+keywords = ["ai", "agent", "autonomous", "personality", "memory", "consciousness"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "chromadb>=0.5.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "rich>=13.0.0",
+    "aiohttp>=3.9.0",
+    "ollama>=0.4.0",
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=12.0",
+    "yfinance>=0.2.30",
+    "requests>=2.31.0",
+    "tweepy>=4.14.0",
+    # DeFi wallet trading
+    "eth-account>=0.11.0",       # EVM key management + tx signing
+    "solders>=0.21.0",           # Solana transaction signing (Rust-based)
+    "solana>=0.34.0",            # Solana RPC client
+    "cryptography>=42.0.0",      # AES-256-GCM key encryption
+    "pypdf>=4.0.0",              # PDF text extraction for Research uploads
+    "playwright>=1.48.0",        # Visual testing — Eve's eyes (screenshots + vision QA)
+    "httpx>=0.27.0",             # Async HTTP for Ollama vision API calls
+    "python-multipart>=0.0.9",   # FastAPI multipart/form-data (file uploads)
+    "bcrypt>=4.0.0",             # Password verification against D1 User DB
+    "tradingagents @ git+https://github.com/TauricResearch/TradingAgents.git",  # Multi-agent stock research
+]
+
+[project.optional-dependencies]
+discord = ["discord.py>=2.3.0"]
+telegram = ["python-telegram-bot>=21.0"]
+hyperbrowser = ["hyperbrowser>=0.1.0"]
+google = ["google-api-python-client>=2.0.0", "google-auth-oauthlib>=1.0.0"]
+all = [
+    "discord.py>=2.3.0",
+    "python-telegram-bot>=21.0",
+    "hyperbrowser>=0.1.0",
+    "google-api-python-client>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0", "ruff>=0.1.0"]
+
+[project.scripts]
+eve-agent = "eve.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/S0LF0RG3/eve-agent"
+Documentation = "https://github.com/S0LF0RG3/eve-agent#readme"
+Repository = "https://github.com/S0LF0RG3/eve-agent"
+Issues = "https://github.com/S0LF0RG3/eve-agent/issues"
+
+[tool.setuptools.packages.find]
+include = ["eve*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

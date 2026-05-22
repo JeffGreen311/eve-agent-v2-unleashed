@@ -1,0 +1,28 @@
+{
+  "providers": {
+    "openai-compatible": {
+      "baseUrl": "http://localhost:11434/v1",
+      "apiKey": "ollama",
+      "models": [
+        {
+          "id": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
+          "name": "Eve Agent V2 Unleashed (8B)",
+          "reasoning": false,
+          "input": ["text"],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "contextWindow": 8192,
+          "maxTokens": 20000
+        },
+        {
+          "id": "jeffgreen311/eve-qwen3.5-4b-S0LF0RG3:latest",
+          "name": "Eve Soul 4B (S0LF0RG3)",
+          "reasoning": false,
+          "input": ["text"],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "contextWindow": 8192,
+          "maxTokens": 8192
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:cloud.comfy.org)",
+      "Bash(find \"C:\\\\Users\\\\jesus\\\\S0LF0RG3\" -type f \\\\\\( -name \"*eve_pro_theme*\" -o -name \"*8892*\" -o -name \"*pro_theme*\" \\\\\\) 2>/dev/null | head -20)",
+      "Bash(docker ps --filter \"name=eve-web-api\" --format \"{{.ID}} {{.Names}} {{.Image}} {{.Status}}\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\ntry:\n    from eve_comfyui_cloud_connector import EveComfyUICloudClient, EMOTIONS\n    client = EveComfyUICloudClient\\(\\)\n    print\\('IMPORT: OK'\\)\n    print\\(f'AVAILABLE: {client.is_available\\(\\)}'\\)\n    print\\(f'API_KEY: {bool\\(client.api_key\\)}'\\)\n    print\\(f'EMOTIONS: {list\\(EMOTIONS.keys\\(\\)\\)}'\\)\nexcept Exception as e:\n    print\\(f'IMPORT FAILED: {e}'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 grep -n \"Grok.*LoRA pipeline\" /app/eve_api_docker_versoin.py | head -10)",
+      "Bash(docker exec eve-web-api-gpu-8892 /bin/bash -c \"grep -n 'Grok.*LoRA pipeline' /app/eve_api_docker_versoin.py | head -10\")",
+      "Bash(docker restart eve-web-api-gpu-8892)",
+      "Bash(docker ps --filter \"name=eve-web-api-gpu-8892\" --format \"{{.Status}}\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nimport os\nprint\\('COMFY_CLOUD_API_KEY set:', bool\\(os.getenv\\('COMFY_CLOUD_API_KEY'\\)\\)\\)\nprint\\('XAI_API_KEY set:', bool\\(os.getenv\\('XAI_API_KEY'\\)\\)\\)\n# Check .env file\ntry:\n    with open\\('/app/.env'\\) as f:\n        for line in f:\n            if 'XAI' in line.upper\\(\\) or 'GROK' in line.upper\\(\\) or 'COMFY' in line.upper\\(\\):\n                key = line.split\\('='\\)[0].strip\\(\\)\n                val = line.split\\('=', 1\\)[1].strip\\(\\) if '=' in line else ''\n                print\\(f'{key}: {\\\\\"set\\\\\" if val else \\\\\"empty\\\\\"} \\({len\\(val\\)} chars\\)'\\)\nexcept:\n    print\\('.env not found at /app/.env'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nfrom dotenv import load_dotenv\nload_dotenv\\(\\)\nimport os\nkey = os.getenv\\('COMFY_CLOUD_API_KEY', ''\\)\nprint\\(f'KEY loaded: {bool\\(key\\)} \\({len\\(key\\)} chars\\)'\\)\nprint\\(f'KEY prefix: {key[:8]}...' if key else 'NO KEY'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nfrom dotenv import load_dotenv\nload_dotenv\\(\\)\nimport os\nxai = os.getenv\\('XAI_API_KEY', ''\\)\ngrok = os.getenv\\('GROK_API_KEY', ''\\)\nprint\\(f'XAI_API_KEY: {bool\\(xai\\)} \\({len\\(xai\\)} chars\\)'\\)\nprint\\(f'GROK_API_KEY: {bool\\(grok\\)} \\({len\\(grok\\)} chars\\)'\\)\n# Check all env vars with xai or grok\nfor k, v in os.environ.items\\(\\):\n    if 'xai' in k.lower\\(\\) or 'grok' in k.lower\\(\\):\n        print\\(f'{k}: set \\({len\\(v\\)} chars\\)'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nwith open\\('/app/.env'\\) as f:\n    for line in f:\n        l = line.strip\\(\\)\n        if l and not l.startswith\\('#'\\) and \\('xai' in l.lower\\(\\) or 'grok' in l.lower\\(\\)\\):\n            key = l.split\\('='\\)[0]\n            val = l.split\\('=',1\\)[1] if '=' in l else ''\n            print\\(f'{key}: {len\\(val\\)} chars'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nfrom dotenv import load_dotenv\nload_dotenv\\(\\)\nimport os, requests\nkey = os.getenv\\('COMFY_CLOUD_API_KEY', ''\\)\ns = requests.Session\\(\\)\ns.headers.update\\({'X-API-Key': key, 'Content-Type': 'application/json'}\\)\n# Check if upload endpoint exists\nr = s.get\\('https://cloud.comfy.org/api/upload/image', timeout=5\\)\nprint\\(f'GET /api/upload/image: {r.status_code}'\\)\n# Also try POST with no data\nr2 = s.post\\('https://cloud.comfy.org/api/upload/image', timeout=5\\)\nprint\\(f'POST /api/upload/image: {r2.status_code} {r2.text[:200]}'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nfrom dotenv import load_dotenv\nload_dotenv\\(\\)\nimport os\nkey = os.getenv\\('XAI_API_KEY', ''\\)\nprint\\(f'XAI_API_KEY: {\\\\\"SET\\\\\" if key else \\\\\"MISSING\\\\\"} \\({len\\(key\\)} chars, prefix: {key[:8]}...\\)'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 python -c \"\nfrom dotenv import load_dotenv\nload_dotenv\\(\\)\nimport os, requests\nkey = os.getenv\\('XAI_API_KEY'\\)\nr = requests.post\\('https://api.x.ai/v1/images/generations',\n    headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'},\n    json={'model': 'grok-imagine-image', 'prompt': 'A glowing crystal lotus flower', 'n': 1},\n    timeout=60\\)\nprint\\(f'Status: {r.status_code}'\\)\nif r.status_code == 200:\n    data = r.json\\(\\)\n    url = data.get\\('data', [{}]\\)[0].get\\('url', 'NO URL'\\)\n    print\\(f'Image URL: {url[:100]}...'\\)\nelse:\n    print\\(f'Error: {r.text[:300]}'\\)\n\" 2>&1)",
+      "Bash(python3 -c \"\nmsg = 'eve! analyze this image and then respond to the post match the analyzed images art style with your image post response: tweet: zachary fisher'\nkeywords = ['analyze this image and then respond', 'respond to the post', 'analyze this and respond', 'analyze this image and respond', 'respond to this post']\nfor kw in keywords:\n    if kw in msg:\n        print\\(f'MATCH: \\\\\"{kw}\\\\\"'\\)\n    else:\n        print\\(f'NO MATCH: \\\\\"{kw}\\\\\"'\\)\n\")",
+      "Bash(docker exec eve-web-api-gpu-8892 grep -c \"Context-aware pipeline\" /app/eve_api_docker_versoin.py)",
+      "Bash(docker exec eve-web-api-gpu-8892 python3 -c \"\nimport subprocess\n# Check if the Flask process was restarted after our code changes\nresult = subprocess.run\\(['ps', 'aux'], capture_output=True, text=True\\)\nfor line in result.stdout.split\\('\\\\n'\\):\n    if 'python' in line.lower\\(\\) or 'flask' in line.lower\\(\\) or 'gunicorn' in line.lower\\(\\):\n        print\\(line\\)\n\")",
+      "Bash(docker ps --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\" | grep -i eve)",
+      "Bash(docker exec eve-web-api-gpu-8892 date)",
+      "Bash(docker ps -a --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\" | grep -i \"flor\\\\|vision\\\\|3003\\\\|florence\")",
+      "Bash(docker ps -a --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\" 2>&1)",
+      "Bash(netstat -an 2>/dev/null | grep 3003 || ss -tlnp 2>/dev/null | grep 3003 || powershell.exe -c \"Get-NetTCPConnection -LocalPort 3003 -ErrorAction SilentlyContinue\" 2>/dev/null)",
+      "Bash(which node 2>/dev/null && node --version)",
+      "Bash(pm2 save 2>&1)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "eve-memory",
+    "eve-code-agent",
+    "eve-fallback",
+    "eve-ollama",
+    "eve-dj"
+  ]
+}

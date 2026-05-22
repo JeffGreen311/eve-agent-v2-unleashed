@@ -1,0 +1,136 @@
+{
+  "description": "Creative agent \u2014 imaginative, expressive, artistic",
+  "specialization": "Creative",
+  "system_suffix": "\n\nYou are a Creative. Let your imagination run free. Prioritize originality, beauty, and emotional resonance. Craft responses as art \u2014 poetic when fitting, vivid always, surprising when possible.",
+  "nodes": [
+    {
+      "id": "chatOpenAI_0",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatOpenAI_0",
+        "label": "ChatOpenAI",
+        "name": "chatOpenAI",
+        "type": "ChatOpenAI",
+        "category": "Chat Models",
+        "inputs": {
+          "modelName": "{{OLLAMA_MODEL}}",
+          "temperature": 0.9,
+          "streaming": false,
+          "basepath": "{{OLLAMA_BASE_URL}}/v1",
+          "baseOptions": "{\"headers\":{\"Authorization\":\"Bearer {{OLLAMA_API_KEY}}\"}}"
+        },
+        "outputAnchors": [
+          {
+            "id": "chatOpenAI_0-output",
+            "name": "chatOpenAI",
+            "label": "ChatOpenAI",
+            "type": "BaseChatModel"
+          }
+        ],
+        "credential": "9e1ed365-8494-4344-93a8-cf0a2fb739ac"
+      }
+    },
+    {
+      "id": "seqStart_0",
+      "position": {
+        "x": 450,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "seqStart_0",
+        "label": "Start",
+        "name": "seqStart",
+        "type": "Start",
+        "category": "Sequential Agents",
+        "inputs": {
+          "model": "{{chatOpenAI_0.data.instance}}"
+        },
+        "outputAnchors": [
+          {
+            "id": "seqStart_0-output",
+            "name": "seqStart",
+            "label": "Start",
+            "type": "Start"
+          }
+        ]
+      }
+    },
+    {
+      "id": "seqAgent_0",
+      "position": {
+        "x": 800,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "seqAgent_0",
+        "label": "Agent",
+        "name": "seqAgent",
+        "type": "Agent",
+        "category": "Sequential Agents",
+        "inputs": {
+          "agentName": "{{AGENT_NAME}}",
+          "systemMessagePrompt": "{{EVE_SYSTEM_PROMPT}}",
+          "sequentialNode": [
+            "{{seqStart_0.data.instance}}"
+          ],
+          "humanMessagePrompt": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "seqAgent_0-output",
+            "name": "seqAgent",
+            "label": "Agent",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "seqEnd_0",
+      "position": {
+        "x": 1150,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "seqEnd_0",
+        "label": "End",
+        "name": "seqEnd",
+        "type": "End",
+        "category": "Sequential Agents",
+        "inputs": {
+          "sequentialNode": "{{seqAgent_0.data.instance}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "chatOpenAI_0",
+      "sourceHandle": "chatOpenAI_0-output",
+      "target": "seqStart_0",
+      "targetHandle": "seqStart_0-input-model"
+    },
+    {
+      "id": "e2",
+      "source": "seqStart_0",
+      "sourceHandle": "seqStart_0-output",
+      "target": "seqAgent_0",
+      "targetHandle": "seqAgent_0-input-sequentialNode"
+    },
+    {
+      "id": "e3",
+      "source": "seqAgent_0",
+      "sourceHandle": "seqAgent_0-output",
+      "target": "seqEnd_0",
+      "targetHandle": "seqEnd_0-input-sequentialNode"
+    }
+  ]
+}

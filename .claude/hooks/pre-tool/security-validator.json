@@ -1,0 +1,34 @@
+{
+  "name": "eve-security-validator",
+  "description": "Validates tool calls for security before execution",
+  "version": "1.0.0",
+  "hooks": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -ExecutionPolicy Bypass -File \".claude/hooks/pre-tool/security-validator.ps1\""
+        }
+      ]
+    },
+    {
+      "matcher": "WriteFile",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -ExecutionPolicy Bypass -File \".claude/hooks/pre-tool/security-validator.ps1\""
+        }
+      ]
+    },
+    {
+      "matcher": "EditFile",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -ExecutionPolicy Bypass -File \".claude/hooks/pre-tool/security-validator.ps1\""
+        }
+      ]
+    }
+  ]
+}

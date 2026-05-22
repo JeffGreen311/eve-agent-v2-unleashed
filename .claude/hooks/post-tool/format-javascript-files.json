@@ -1,0 +1,18 @@
+{
+  "name": "format-javascript-files",
+  "description": "Automatically format JavaScript files with Prettier",
+  "trigger": "post-tool",
+  "script": "format-javascript-files.js",
+  "enabled": true,
+  "config": {
+    "extensions": [".js", ".jsx"],
+    "formatter": "prettier",
+    "prettierOptions": {
+      "semi": true,
+      "trailingComma": "es5",
+      "singleQuote": true,
+      "printWidth": 80,
+      "tabWidth": 2
+    }
+  }
+}

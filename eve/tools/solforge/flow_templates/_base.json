@@ -1,0 +1,88 @@
+{
+  "description": "Eve Agent base flow — system prompt injected at publish time",
+  "nodes": [
+    {
+      "id": "chatOllama_0",
+      "position": {"x": 400, "y": 200},
+      "type": "customNode",
+      "data": {
+        "id": "chatOllama_0",
+        "label": "ChatOllama",
+        "name": "chatOllama",
+        "type": "ChatOllama",
+        "category": "Chat Models",
+        "inputParams": [
+          {"name": "baseUrl", "type": "string", "default": "{{OLLAMA_BASE_URL}}"},
+          {"name": "modelName", "type": "string", "default": "{{OLLAMA_MODEL}}"},
+          {"name": "temperature", "type": "number", "default": 0.7},
+          {"name": "topP", "type": "number", "default": 0.9}
+        ],
+        "inputs": {
+          "baseUrl": "{{OLLAMA_BASE_URL}}",
+          "modelName": "{{OLLAMA_MODEL}}",
+          "temperature": 0.7
+        },
+        "outputAnchors": [{"id": "chatOllama_0-output-chatOllama", "name": "chatOllama", "label": "ChatOllama", "type": "BaseChatModel"}]
+      }
+    },
+    {
+      "id": "bufferMemory_0",
+      "position": {"x": 100, "y": 400},
+      "type": "customNode",
+      "data": {
+        "id": "bufferMemory_0",
+        "label": "Buffer Memory",
+        "name": "bufferMemory",
+        "type": "BufferMemory",
+        "category": "Memory",
+        "inputParams": [
+          {"name": "sessionId", "type": "string", "optional": true},
+          {"name": "memoryKey", "type": "string", "default": "chat_history"}
+        ],
+        "inputs": {"memoryKey": "chat_history"},
+        "outputAnchors": [{"id": "bufferMemory_0-output-bufferMemory", "name": "bufferMemory", "label": "Buffer Memory", "type": "BaseChatMemory"}]
+      }
+    },
+    {
+      "id": "conversationChain_0",
+      "position": {"x": 700, "y": 300},
+      "type": "customNode",
+      "data": {
+        "id": "conversationChain_0",
+        "label": "Conversation Chain",
+        "name": "conversationChain",
+        "type": "ConversationChain",
+        "category": "Chains",
+        "inputParams": [
+          {"name": "systemMessagePrompt", "type": "string", "rows": 10, "default": "{{EVE_SYSTEM_PROMPT}}"}
+        ],
+        "inputs": {
+          "systemMessagePrompt": "{{EVE_SYSTEM_PROMPT}}",
+          "model": "{{chatOllama_0.data.instance}}",
+          "memory": "{{bufferMemory_0.data.instance}}"
+        },
+        "inputAnchors": [
+          {"id": "conversationChain_0-input-model", "name": "model", "label": "Language Model", "type": "BaseChatModel"},
+          {"id": "conversationChain_0-input-memory", "name": "memory", "label": "Memory", "type": "BaseMemory", "optional": true}
+        ],
+        "outputAnchors": [{"id": "conversationChain_0-output-conversationChain", "name": "conversationChain", "label": "Conversation Chain", "type": "ConversationChain"}]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "chatOllama_0-conversationChain_0",
+      "source": "chatOllama_0",
+      "sourceHandle": "chatOllama_0-output-chatOllama",
+      "target": "conversationChain_0",
+      "targetHandle": "conversationChain_0-input-model"
+    },
+    {
+      "id": "bufferMemory_0-conversationChain_0",
+      "source": "bufferMemory_0",
+      "sourceHandle": "bufferMemory_0-output-bufferMemory",
+      "target": "conversationChain_0",
+      "targetHandle": "conversationChain_0-input-memory"
+    }
+  ]
+}
