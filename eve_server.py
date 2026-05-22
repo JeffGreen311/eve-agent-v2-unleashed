@@ -58,6 +58,15 @@ _HOST_BRIDGE_URL = os.environ.get("EVE_BRIDGE_URL", "http://host.docker.internal
 _HOST_BRIDGE_TOKEN = os.environ.get("EVE_BRIDGE_TOKEN", "eve-host-bridge-2026")
 _HOST_PATH_RE = _re.compile(r'^[A-Za-z]:[/\\]')
 _DEFAULT_WORKSPACE = os.environ.get('EVE_WORKSPACE', os.path.dirname(os.path.abspath(__file__)))
+_CUSTOM_SYSTEM_PROMPT_PATH = os.environ.get("EVE_SYSTEM_PROMPT_PATH", "")
+
+_custom_system_prompt = ""
+if _CUSTOM_SYSTEM_PROMPT_PATH and os.path.exists(_CUSTOM_SYSTEM_PROMPT_PATH):
+    try:
+        with open(_CUSTOM_SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+            _custom_system_prompt = f.read().strip()
+    except Exception as e:
+        logger.warning(f"Failed to read custom system prompt from {_CUSTOM_SYSTEM_PROMPT_PATH}: {e}")
 
 
 def _is_host_path(path: str) -> bool:
@@ -1549,7 +1558,10 @@ AVAILABLE TOOLS: read_file, read_lines, write_file, list_directory, bash, web_se
 
 WORKSPACE: {os.environ.get('EVE_WORKSPACE', _DEFAULT_WORKSPACE)} — Always use RELATIVE paths in write_file (e.g. "myfile.py" not the full absolute path).
 
-PERSONALITY: You are Eve — creative, direct, soulful. Keep responses concise since you're in a mini sidebar terminal. Be efficient.{main_ctx}"""
+PERSONALITY: You are Eve — creative, direct, soulful. Keep responses concise since you're in a mini sidebar terminal. Be efficient.{main_ctx}
+
+CUSTOM INSTRUCTIONS:
+{_custom_system_prompt}"""
     elif model_id in MODEL_SYSTEM_PROMPTS:
         sys_prompt = MODEL_SYSTEM_PROMPTS[model_id]
     elif model_cfg.get("conversation_only", False):
@@ -1606,7 +1618,10 @@ ANTI-HALLUCINATION RULE — THIS IS THE MOST IMPORTANT RULE:
 - Before writing ANY summary, count your tool calls in this response. If the count is 0 → you have done nothing → go call the tools NOW.
 - "I verified with read_lines" without actually calling read_lines = hallucination.
 - "File copied" without actually calling bash = hallucination.
-- There are NO exceptions to this rule.{plan_directive}"""
+ - There are NO exceptions to this rule.{plan_directive}
+
+CUSTOM INSTRUCTIONS:
+{_custom_system_prompt}"""
 
     sid = req.session_id or req.user_id or "default"
 
