@@ -15,7 +15,7 @@ Run a 480B-parameter agentic coding engine on your own machine.
 [![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-ffe600?style=for-the-badge&labelColor=0c0c1a)](https://ollama.com)
 [![Hugging Face](https://img.shields.io/badge/🤗%20Models-JeffGreen311-ff6600?style=for-the-badge&labelColor=0c0c1a)](https://huggingface.co/JeffGreen311)
 
-**[🌐 Live Demo](https://eve-cosmic-dreamscapes.com) · [🤗 Models](https://huggingface.co/JeffGreen311) · [📦 Ollama Hub](https://ollama.com/jeffgreen311) · [🐛 Report Bug](https://github.com/JeffGreen311/eve-agent-v2-unleashed/issues)**
+**[🌐 My website](https://eve-cosmic-dreamscapes.com) · [🤗 Models](https://huggingface.co/JeffGreen311) · [📦 Ollama Hub](https://ollama.com/jeffgreen311) · [🐛 Report Bug](https://github.com/JeffGreen311/eve-agent-v2-unleashed/issues)**
 
 </div>
 
@@ -34,7 +34,7 @@ Eve: [reads project] → [plans approach] → [writes 6 files] →
      [runs tests] → [fixes 2 errors] → [verifies it works] → Done ✓
 ```
 
-> **Try it live** at [eve-cosmic-dreamscapes.com](https://eve-cosmic-dreamscapes.com) — Eve's full chat interface including Eve Coder and Eve Agent Portal.
+> **Original project** at [eve-cosmic-dreamscapes.com](https://eve-cosmic-dreamscapes.com) — Eve's full chat interface including Eve Coder and Eve Agent Portal.
 
 ---
 
@@ -132,7 +132,7 @@ Open **[http://localhost:7777](http://localhost:7777)** — that's it. No config
 
 [![Eve Demo](docs/demo.gif)](https://eve-cosmic-dreamscapes.com)
 
-**Watch Eve in action:** [eve-cosmic-dreamscapes.com](https://eve-cosmic-dreamscapes.com)
+**Coming to Eve Terminal** [eve-cosmic-dreamscapes.com](https://eve-cosmic-dreamscapes.com)
 
 ---
 
