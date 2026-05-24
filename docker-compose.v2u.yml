@@ -1,0 +1,45 @@
+version: '3.8'
+
+# Eve V2U Unleashed — standalone agent container
+# Joins the existing eve-network to reach the ollama container.
+#
+# Usage:
+#   docker compose -f docker-compose.v2u.yml up -d
+#
+# Then open http://localhost:7778 — or use the panel in eve_pro_theme_interface.html.
+# To set workspace: POST http://localhost:7778/workspace  {"path":"/workspace/myproject"}
+
+services:
+  eve-v2u-unleashed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eve-v2u-unleashed
+    ports:
+      - "7778:7777"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=eve-unleashed
+      - EVE_DEFAULT_MODEL=eve-unleashed
+      - EVE_WORKSPACE=/workspace
+      - EVE_IN_DOCKER=1
+      # Optional: set workspace to a specific host path by overriding EVE_WORKSPACE
+      # e.g.  EVE_WORKSPACE=/workspace/myapp
+    volumes:
+      # Mount the user's home (or any directory) into /workspace inside the container.
+      # Adjust the left side to the path you want the agent to operate in.
+      - ${V2U_HOST_WORKSPACE:-C:/Users/jesus}:/workspace
+      # Persist quests and RPG stats across restarts
+      - eve_v2u_data:/app/quests
+    networks:
+      - eve-network
+    restart: unless-stopped
+
+networks:
+  eve-network:
+    external: true
+
+volumes:
+  eve_v2u_data:
+    driver: local
