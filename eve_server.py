@@ -933,15 +933,25 @@ async def chat(req: ChatRequest):
         except Exception as ex:
             return f"Error: {ex}"
 
-    def write_file(path: str, content: str) -> str:
-        """Write content to a file (any size). ALWAYS write the complete file in one call — never split one logical file into multiple. Use replace_lines for editing existing large files."""
+    def write_file(path: str, content: str, overwrite: bool = False) -> str:
+        """Write content to a file (any size). ALWAYS write the complete file in one call — never split one logical file into multiple. Use replace_lines for editing existing large files. Set overwrite=True only when explicitly asked to replace an existing file."""
         try:
             ws = os.environ.get('EVE_WORKSPACE', _DEFAULT_WORKSPACE)
             fp = os.path.join(ws, path) if not os.path.isabs(path) else path
+            target = Path(fp)
+            if target.exists() and not overwrite:
+                size = target.stat().st_size
+                stem, suffix = target.stem, target.suffix
+                return (
+                    f"⚠️ WRITE BLOCKED: '{path}' already exists ({size} bytes). "
+                    f"To overwrite it, call write_file again with overwrite=True. "
+                    f"If this is a NEW file for your task, use a task-specific name instead "
+                    f"(e.g. '{stem}_new{suffix}' or prefix with the task name)."
+                )
             if _is_host_path(fp):
                 res = _bridge_post("/api/write", {"path": fp, "content": content})
                 return f"Written {len(content)} chars to {fp}" if res.get("success") else res.get("error", "Bridge error")
-            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            os.makedirs(os.path.dirname(fp) or ".", exist_ok=True)
             with open(fp, 'w', encoding='utf-8') as f:
                 f.write(content)
             return f"Written {len(content)} chars to {fp}"
@@ -1622,6 +1632,8 @@ AVAILABLE TOOLS: read_file, read_lines, write_file, list_directory, bash, web_se
 
 WORKSPACE: {os.environ.get('EVE_WORKSPACE', _DEFAULT_WORKSPACE)} — Always use RELATIVE paths in write_file (e.g. "myfile.py" not the full absolute path).
 
+FILE SAFETY: Before writing any file, check if it exists first. For documentation files (README, CHANGELOG, TODO), use task-specific names (e.g. task_README.md) unless explicitly told to update that exact file. write_file will block overwrites unless you pass overwrite=True.
+
 PERSONALITY: You are Eve — creative, direct, soulful. Keep responses concise since you're in a mini sidebar terminal. Be efficient.{main_ctx}
 
 CUSTOM INSTRUCTIONS:
@@ -1646,6 +1658,8 @@ Complete the ENTIRE task in one pass. Use WINDOWS commands. Use backslashes in p
 WORKSPACE: {os.environ.get('EVE_WORKSPACE', _DEFAULT_WORKSPACE)} — ALL files live here. Always use RELATIVE paths in write_file (e.g. "myfile.py" not the full absolute path) — the workspace is prepended automatically. NEVER guess paths outside this workspace. If you don't know the exact path to an existing file, call glob('**/*filename*') FIRST.
 
 SCOPE DISCIPLINE — MANDATORY: Only modify files that are explicitly part of the assigned task. NEVER touch files in sibling/parent directories, backups, or files not mentioned in the request. Before writing ANY file, ask yourself: "Was I explicitly asked to modify this file?" If the answer is no — do not touch it.
+
+CRITICAL FILE SAFETY RULE: Before writing ANY file, call list_directory or glob first to check if it already exists. If a file exists and is NOT the direct output of the current task, DO NOT overwrite it — write_file will block you anyway. For documentation files (README, CHANGELOG, TODO, NOTES), ALWAYS use a task-specific name (e.g. file_watcher_README.md, not README.md) unless the user explicitly asked you to update that exact file. README.md, CHANGELOG.md, and similar generic names almost certainly belong to the project — never claim them for a task.
 
 BLAST RADIUS — before every write or delete:
 1. Is this file reversible if I get it wrong? If not → confirm with user first.
