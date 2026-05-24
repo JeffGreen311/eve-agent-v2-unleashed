@@ -750,8 +750,12 @@ body { animation: crt-flicker 8s infinite; }
   <span class="prompt">❯</span>
   <input type="text" id="user-input" placeholder="Talk to Eve or type /help for commands..." autofocus>
   <!-- Toolbar buttons -->
-  <button id="btn-attach" title="Attach file" onclick="document.getElementById('file-input').click()"
+  <button id="btn-attach" title="Attach file (tooltip: drag & drop also works)" onclick="document.getElementById('file-input').click()"
     style="background:#0a1a0a;color:#0ff;border:1px solid #0ff4;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:4px">📎</button>
+  <button title="Quest queue (/quest)" onclick="openQuestPanel()"
+    style="background:#001a1a;color:#0ff;border:1px solid #0ff4;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">🗡️</button>
+  <button title="RPG stats (/stats)" onclick="openStatsPanel()"
+    style="background:#1a001a;color:#f0f;border:1px solid #f0f4;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">⚡</button>
   <button id="btn-autoaccept" title="Auto-accept edits (click to toggle)" onclick="toggleAutoAccept()"
     style="background:#0a1a0a;color:#888;border:1px solid #3334;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">✏️ Auto</button>
   <button id="btn-plan" title="Plan mode (click to toggle)" onclick="togglePlanMode()"
@@ -785,6 +789,36 @@ body { animation: crt-flicker 8s infinite; }
     style="background:#2a0a0a;color:#f55;border:1px solid #f55;font-family:'Share Tech Mono';font-size:10px;padding:3px 10px;border-radius:2px;cursor:pointer">⏹ Stop</button>
 </div>
 
+<!-- QUEST PANEL MODAL -->
+<div id="quest-panel" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#0a0a14;border:1px solid #00ffff44;border-radius:6px;padding:20px;width:520px;max-height:80vh;overflow-y:auto;font-family:'Share Tech Mono'">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="color:#0ff;font-size:14px">🗡️ QUEST QUEUE</span>
+      <button onclick="document.getElementById('quest-panel').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <input id="quest-title-in" placeholder="Quest title..." style="flex:1;background:#050510;color:#0ff;border:1px solid #0ff4;padding:4px 8px;font-family:'Share Tech Mono';font-size:11px;border-radius:2px">
+      <textarea id="quest-body-in" placeholder="Instructions..." style="flex:2;background:#050510;color:#0ff;border:1px solid #0ff4;padding:4px 8px;font-family:'Share Tech Mono';font-size:11px;border-radius:2px;height:32px;resize:none"></textarea>
+      <button onclick="addQuest()" style="background:#001a1a;color:#0ff;border:1px solid #0ff;padding:4px 10px;font-family:'Share Tech Mono';font-size:11px;border-radius:2px;cursor:pointer">+ ADD</button>
+    </div>
+    <div id="quest-list" style="color:#aaa;font-size:11px">Loading...</div>
+  </div>
+</div>
+
+<!-- STATS PANEL MODAL -->
+<div id="stats-panel" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#0a0a14;border:1px solid #ff00ff44;border-radius:6px;padding:20px;width:440px;max-height:80vh;overflow-y:auto;font-family:'Share Tech Mono'">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="color:#f0f;font-size:14px">⚡ EVE RPG STATS</span>
+      <button onclick="document.getElementById('stats-panel').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button>
+    </div>
+    <div id="stats-body" style="color:#aaa;font-size:11px;white-space:pre">Loading...</div>
+  </div>
+</div>
+
+<!-- RPG TOAST -->
+<div id="rpg-toast" style="display:none;position:fixed;bottom:80px;right:16px;z-index:2000;background:#0a0a14;border:1px solid #f0f;border-radius:4px;padding:8px 14px;font-family:'Share Tech Mono';font-size:11px;color:#f0f;box-shadow:0 0 12px #f0f4;animation:none"></div>
+
 <!-- COMMAND BAR -->
 <div id="command-bar">
   <span><span class="cmd">/HELP</span> COMMANDS</span>
@@ -792,6 +826,9 @@ body { animation: crt-flicker 8s infinite; }
   <span><span class="cmd">F1</span>IDLE <span class="cmd">F2</span>JUMP <span class="cmd">F3</span>ATTACK <span class="cmd">F4</span>WALK</span>
   <span>│</span>
   <span><span class="cmd">F5</span>FX <span class="cmd">F6</span>RAIN <span class="cmd">F7</span>LOVE <span class="cmd">F8</span>TRANSCEND</span>
+  <span>│</span>
+  <span onclick="openQuestPanel()" style="cursor:pointer" title="/quest"><span class="cmd">/QUEST</span>🗡️</span>
+  <span onclick="openStatsPanel()" style="cursor:pointer" title="/stats"><span class="cmd">/STATS</span>⚡</span>
   <span>│</span>
   <span style="color:var(--border-green)">● UNLEASHED</span>
 </div>
@@ -1498,6 +1535,8 @@ userInput.addEventListener('keydown', async (e) => {
                 const retryPart = p.retries > 0 ? ` · <span style="color:#fa0">${p.retries} retry</span>` : '';
                 addMsg('system', `<span style="color:#444;font-size:10px">⏱ ${p.wall_s}s · ${p.rounds} round(s) · ${p.tool_calls} tool call(s)${errPart}${retryPart}</span>`);
               }
+            } else if (data.type === 'rpg_event') {
+              showRpgToast(data);
             } else if (data.type === 'context_usage') {
               const pct = data.pct || 0;
               const bar = document.getElementById('ctx-gauge-bar');
@@ -1607,6 +1646,12 @@ async function handleCommand(cmd) {
   const c = parts[0].toLowerCase();
   const args = parts.slice(1).join(' ');
 
+  if (c === '/quest' || c === '/quests') {
+    openQuestPanel(); return;
+  } else if (c === '/stats' || c === '/rpg') {
+    openStatsPanel(); return;
+  }
+
   if (c === '/help') {
     addMsg('system', `
 ╔══════════════════════════════════╗
@@ -1618,6 +1663,8 @@ async function handleCommand(cmd) {
 ║  /shell cmd  Run shell command   ║
 ║  /clear      Clear chat          ║
 ║  /workspace  Show workspace      ║
+║  /quest      Open quest queue    ║
+║  /stats      Open RPG stats      ║
 ║  /quit       Exit                ║
 ╚══════════════════════════════════╝`);
   } else if (c === '/clear') {
@@ -1672,6 +1719,98 @@ async function handleCommand(cmd) {
     addMsg('system', 'Unknown command. Type /help');
   }
 }
+
+// ══ QUEST PANEL ══
+async function openQuestPanel() {
+  const panel = document.getElementById('quest-panel');
+  panel.style.display = 'flex';
+  const list = document.getElementById('quest-list');
+  list.textContent = 'Loading...';
+  try {
+    const r = await fetch(API + '/quest/list');
+    const d = await r.json();
+    const quests = d.quests || [];
+    if (!quests.length) { list.textContent = 'No quests queued.'; return; }
+    list.innerHTML = quests.map(q => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #0ff1">
+        <span style="color:${q.status==='pending'?'#0ff':q.status==='running'?'#fa0':'#0f0'}">${q.status==='pending'?'🗡️':q.status==='running'?'⚔️':'✅'} ${escapeHtml(q.name)}</span>
+        <button onclick="deleteQuest('${escapeHtml(q.name)}')" style="background:none;border:1px solid #f554;color:#f55;cursor:pointer;font-size:10px;padding:2px 6px;border-radius:2px">✕</button>
+      </div>`).join('');
+  } catch(e) { list.textContent = 'Error: ' + e.message; }
+}
+
+async function addQuest() {
+  const title = document.getElementById('quest-title-in').value.trim();
+  const body  = document.getElementById('quest-body-in').value.trim();
+  if (!title) return;
+  try {
+    await fetch(API + '/quest/add', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({title, content: body || title})
+    });
+    document.getElementById('quest-title-in').value = '';
+    document.getElementById('quest-body-in').value = '';
+    openQuestPanel();
+  } catch(e) { addMsg('error', 'Quest add failed: ' + e.message); }
+}
+
+async function deleteQuest(name) {
+  try {
+    await fetch(API + '/quest/' + encodeURIComponent(name), {method:'DELETE'});
+    openQuestPanel();
+  } catch(e) { addMsg('error', 'Quest delete failed: ' + e.message); }
+}
+
+// ══ STATS PANEL ══
+async function openStatsPanel() {
+  const panel = document.getElementById('stats-panel');
+  panel.style.display = 'flex';
+  const body = document.getElementById('stats-body');
+  body.textContent = 'Loading...';
+  try {
+    const r = await fetch(API + '/rpg/stats');
+    const d = await r.json();
+    const s = d.stats || {};
+    const xpFilled = Math.round((s.xp / Math.max(s.xp_to_next, 1)) * 20);
+    const xpBar = '█'.repeat(xpFilled) + '░'.repeat(20 - xpFilled);
+    const topTools = Object.entries(s.tool_call_counts || {}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${k}×${v}`).join(', ') || 'none yet';
+    const achs = (s.achievements || []).slice(-8).map(a => `  ${a.icon} ${a.name}`).join('\n') || '  (none yet)';
+    body.textContent = [
+      `Level:    ${s.level} — ${s.class}`,
+      `XP:       [${xpBar}] ${s.xp}/${s.xp_to_next}`,
+      `Class:    ${s.class_desc}`,
+      '',
+      `Tasks:    ${s.total_tasks_completed} completed`,
+      `Quests:   ${s.total_quests_completed} completed`,
+      `Tools:    ${s.total_tool_calls} total calls`,
+      `Top:      ${topTools}`,
+      '',
+      'ACHIEVEMENTS',
+      achs,
+    ].join('\n');
+  } catch(e) { body.textContent = 'Error: ' + e.message; }
+}
+
+// ══ RPG TOAST ══
+function showRpgToast(data) {
+  const toast = document.getElementById('rpg-toast');
+  const lines = [];
+  if (data.xp_gained) lines.push(`+${data.xp_gained} XP`);
+  if (data.new_levels && data.new_levels.length) lines.push(`⚡ LEVEL UP → ${data.new_levels[data.new_levels.length-1]}`);
+  if (data.achievements && data.achievements.length) data.achievements.forEach(a => lines.push(`🏆 ${a}`));
+  if (!lines.length) return;
+  toast.textContent = lines.join(' · ');
+  toast.style.display = 'block';
+  toast.style.borderColor = data.new_levels && data.new_levels.length ? '#ff0' : '#f0f';
+  toast.style.color = data.new_levels && data.new_levels.length ? '#ff0' : '#f0f';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.display = 'none'; }, 4000);
+}
+
+// Close modals on backdrop click
+document.getElementById('quest-panel').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display='none'; });
+document.getElementById('stats-panel').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display='none'; });
 
 // ══ SYSTEM STATS ══
 async function updateStats() {
