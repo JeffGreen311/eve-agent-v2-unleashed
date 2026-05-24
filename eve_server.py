@@ -1285,6 +1285,41 @@ async def models():
     return {"models": list(MODELS.values())}
 
 
+@app.get("/api/ollama-models")
+async def ollama_models():
+    """List all models currently available in the local Ollama instance (no pull)."""
+    from ollama import Client as _OllamaClient
+    host = os.environ.get('OLLAMA_BASE_URL', os.environ.get('OLLAMA_HOST', 'http://localhost:11434'))
+    try:
+        client = _OllamaClient(host=host)
+        raw = client.list().models
+        local_ids = [m.model for m in raw]
+    except Exception as e:
+        logger.warning(f"Could not list Ollama models: {e}")
+        local_ids = []
+
+    result = []
+    # Local models first — enrich with MODELS metadata if we know the model
+    for mid in local_ids:
+        info = MODELS.get(mid, {})
+        result.append({
+            "id": mid,
+            "name": info.get("name", mid),
+            "cloud": False,
+            "tools": info.get("tools", True),
+        })
+    # Append cloud-only models from the MODELS registry
+    for mid, info in MODELS.items():
+        if info.get("cloud") and mid not in local_ids:
+            result.append({
+                "id": mid,
+                "name": info.get("name", mid),
+                "cloud": True,
+                "tools": info.get("tools", False),
+            })
+    return {"models": result, "ollama_host": host}
+
+
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
     """SSE streaming V2U agent chat — live thinking, tool calls, and content."""

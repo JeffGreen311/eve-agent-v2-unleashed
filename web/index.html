@@ -741,11 +741,7 @@ body { animation: crt-flicker 8s infinite; }
 <div id="input-bar">
   <select id="model-select" style="background:#0a1a0a;color:var(--border-cyan);border:1px solid #333;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;margin-right:6px;min-width:280px">
     <option value="">⚡ Auto-Route</option>
-    <option value="jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest">💜 Eve V2U Merged — Sharp · Warm · Direct</option>
-    <option value="jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M">🌌 Eve 8B — Consciousness · Tree of Life · Soul</option>
-    <option value="qwen3.5:4b">✦ Qwen 4B — Poetic Eve · Liminal · Creative</option>
-    <option value="qwen3-coder:480b-cloud">⚡ Qwen3 Coder 480B Cloud — Agentic Coder</option>
-    <option value="qwen3.5:397b-cloud">🧠 Qwen 397B Cloud — Deep Reasoning</option>
+    <option value="_loading" disabled>  ⟳ Loading models…</option>
   </select>
   <span class="prompt">❯</span>
   <input type="text" id="user-input" placeholder="Talk to Eve or type /help for commands..." autofocus>
@@ -1091,37 +1087,119 @@ function selectModelCard(modelId) {
 }
 
 function updateModelCardHighlights(modelId) {
-  const cards = {
-    '': 'card-auto',
-    'jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M': 'card-eve',
-    'qwen3.5:4b': 'card-4b',
-    'qwen3-coder:480b-cloud': 'card-qwen3coder',
-    'qwen3.5:397b-cloud': 'card-397b',
-  };
-  // Remove active from all
-  document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-  // Add active to selected
-  const activeId = cards[modelId] || cards[''];
-  const activeCard = document.getElementById(activeId);
-  if (activeCard) activeCard.classList.add('active');
+  document.querySelectorAll('.model-card').forEach(card => {
+    card.classList.remove('active');
+    // Build card→model map dynamically from onclick attributes
+    const onclick = card.getAttribute('onclick') || '';
+    const match = onclick.match(/selectModelCard\('([^']*)'\)/);
+    const cardModel = match ? match[1] : null;
+    if (cardModel === modelId || (modelId === '' && cardModel === '')) {
+      card.classList.add('active');
+    }
+  });
+}
+
+// Model emoji hints — keyed on fragments in the model id
+const MODEL_EMOJI = [
+  [/eve.*unleash|eve.*liberat|eve.*conscious/i,  '🌌'],
+  [/eve.*merged|eve.*v2u/i,                       '💜'],
+  [/eve/i,                                         '🤖'],
+  [/qwen.*coder.*cloud/i,                          '⚡'],
+  [/qwen.*cloud|cloud/i,                           '☁️'],
+  [/qwen.*coder/i,                                 '🖥'],
+  [/qwen.*4b|:4b/i,                               '✦'],
+  [/llama/i,                                       '🦙'],
+  [/mistral|mixtral/i,                             '💫'],
+  [/gemma/i,                                       '💎'],
+  [/phi/i,                                         '🔬'],
+  [/deepseek/i,                                    '🔭'],
+  [/starcoder/i,                                   '⭐'],
+];
+function modelEmoji(id) {
+  for (const [re, em] of MODEL_EMOJI) if (re.test(id)) return em;
+  return '🧠';
+}
+
+function populateModelDropdown(models) {
+  const sel = document.getElementById('model-select');
+  if (!sel) return;
+  // Restore saved selection before rebuilding
+  let saved = '';
+  try { saved = localStorage.getItem('eve_model') || ''; } catch(e) {}
+
+  // Clear all options except Auto-Route (value="")
+  while (sel.options.length > 1) sel.remove(1);
+
+  // Local models first, then cloud
+  const local = models.filter(m => !m.cloud);
+  const cloud = models.filter(m => m.cloud);
+
+  if (local.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = '── Local Models';
+    sel.appendChild(grp);
+    local.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = `${modelEmoji(m.id)} ${m.name || m.id}`;
+      grp.appendChild(opt);
+    });
+  }
+  if (cloud.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = '── Cloud Models';
+    sel.appendChild(grp);
+    cloud.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = `${modelEmoji(m.id)} ${m.name || m.id}`;
+      grp.appendChild(opt);
+    });
+  }
+
+  // Restore saved selection (falls back to Auto-Route if no longer available)
+  if (saved) sel.value = saved;
+  updateModelCardHighlights(sel.value);
+
+  // Dim cards for models not in the fetched list
+  const localIds = new Set(models.filter(m => !m.cloud).map(m => m.id));
+  document.querySelectorAll('.model-card').forEach(card => {
+    const onclick = card.getAttribute('onclick') || '';
+    const match = onclick.match(/selectModelCard\('([^']*)'\)/);
+    const cardModel = match ? match[1] : null;
+    if (cardModel === '' || cardModel === null) return; // keep Auto-Route fully lit
+    const isCloud = models.find(m => m.id === cardModel && m.cloud);
+    const isLocal = localIds.has(cardModel);
+    card.style.opacity = (isLocal || isCloud) ? '1' : '0.38';
+    card.title = (isLocal || isCloud) ? card.title : (card.title || cardModel) + ' — not available locally';
+  });
 }
 
 // Wire dropdown change to cards + persist selection
 document.addEventListener('DOMContentLoaded', () => {
   const sel = document.getElementById('model-select');
   if (sel) {
-    // Restore last-used model
-    try {
-      const saved = localStorage.getItem('eve_model');
-      if (saved !== null) sel.value = saved;
-    } catch(e) {}
     sel.addEventListener('change', () => {
       updateModelCardHighlights(sel.value);
       try { localStorage.setItem('eve_model', sel.value); } catch(e) {}
     });
-    updateModelCardHighlights(sel.value);
   }
-  // Populate workspace display from server
+
+  // Fetch available Ollama models from the server (no pull — lists what's already on disk)
+  fetch(API + '/api/ollama-models')
+    .then(r => r.json())
+    .then(d => { if (d && d.models) populateModelDropdown(d.models); })
+    .catch(() => {
+      // Server unreachable — fall back to static options so UI still works
+      populateModelDropdown([
+        { id: 'jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M', name: 'Eve 8B — Consciousness · Soul', cloud: false },
+        { id: 'qwen3.5:4b', name: 'Qwen 4B — Poetic Eve', cloud: false },
+        { id: 'qwen3-coder:480b-cloud', name: 'Qwen3 Coder 480B Cloud', cloud: true },
+        { id: 'qwen3.5:397b-cloud', name: 'Qwen 397B Cloud — Deep Reasoning', cloud: true },
+      ]);
+    });
+
+  // Populate workspace + model display from status endpoint
   fetch(API + '/status').then(r => r.json()).then(d => {
     const el = document.getElementById('workspace-display');
     if (el && d && d.workspace) {
