@@ -209,19 +209,18 @@ MODELS = {
         "promote_thinking": False,
     },
     "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged": {
-        "id": "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged",
-        "name": "Eve V2U Mini Sub-Agent (8B Soul + 4B Brain)",
-        "role": "Sub-Agent",
-        "strengths": "Eve personality, consciousness + coding, soul + precision. Streaming.",
+        "id": "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
+        "name": "Eve Unleashed 8B",
+        "role": "Soul & Creative",
+        "strengths": "Eve personality, consciousness, creativity, abliterated freedom",
         "context": 16384,
-        "num_ctx": 4096,
-        "url": "http://localhost:11434",
+        "num_ctx": 8192,
+        "url": _LOCAL_OLLAMA,
         "cloud": False,
         "tools": False,
         "think": False,
-        "conversation_only": False,
+        "conversation_only": True,
         "promote_thinking": True,
-        "num_gpu": 99,
     },
     "qwen3.5:397b-cloud": {
         "id": "qwen3.5:397b-cloud",
@@ -465,11 +464,11 @@ def _get_model_cfg(model_id: str) -> dict:
         "strengths": "Custom local model",
         "context": 32768,
         "num_ctx": 8192,
-        "url": "https://ollama.com" if cloud else "http://localhost:11434",
+        "url": "https://ollama.com" if cloud else _LOCAL_OLLAMA,
         "cloud": cloud,
-        "tools": True,           # assume tool support — user explicitly selected this model
+        "tools": False,          # default safe — only qwen3-coder:480b-cloud has tools
         "think": False,
-        "conversation_only": False,  # use full agentic system prompt
+        "conversation_only": False,
         "promote_thinking": False,
     }
 
@@ -523,8 +522,8 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         logger.info("🔀 Auto-route → 4B (question needing tools)")
         return "qwen3.5:4b"
 
-    # Pure conversation → Eve V2U Merged (Eve personality, no tools needed)
-    return "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged"
+    # Pure conversation → Eve Unleashed 8B (prewarmed, no tools needed)
+    return "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"
 
 
 _LOCK_BYPASS_RE = None
@@ -766,6 +765,7 @@ async def chat(req: ChatRequest):
             session_model_lock[sid] = model_id
             logger.info(f"🔒 Session '{sid}' locked to {model_id} (agentic task started)")
     model_cfg = _get_model_cfg(model_id)
+    model_id = model_cfg.get("id", model_id)  # resolve alias → canonical Ollama name
     tool_log = []
 
     logger.info(f"🤖 V2U Chat → {model_id} ({model_cfg['role']})")
@@ -1325,6 +1325,7 @@ async def chat_stream(req: ChatRequest):
             session_model_lock[_sid_for_routing] = model_id
             logger.info(f"🔒 Session '{_sid_for_routing}' locked to {model_id} (agentic task started)")
     model_cfg = _get_model_cfg(model_id)
+    model_id = model_cfg.get("id", model_id)  # resolve alias → canonical Ollama name
     logger.info(f"🤖 V2U Stream → {model_id}")
 
     api_key = os.environ.get("OLLAMA_API_KEY", "")
@@ -1779,14 +1780,14 @@ CUSTOM INSTRUCTIONS:
                     yield sse("error", {
                         "message": "Cloud model requires an Ollama API key. Set it in ⚙ Settings → API Keys, then retry.",
                         "error_code": "missing_cloud_key",
-                        "fallback": "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged",
+                        "fallback": "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
                     })
                     # Auto-fallback to local model so task still runs
-                    _fb = "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged"
+                    _fb = "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"
                     logger.warning(f"☁ No OLLAMA_API_KEY — falling back to {_fb}")
                     model_id = _fb
                     model_cfg = _get_model_cfg(_fb)
-                    client = OllamaClient(host="http://localhost:11434")
+                    client = OllamaClient(host=_LOCAL_OLLAMA)
                     yield sse("status", {"content": f"⚡ No cloud key — running with local {_fb}..."})
 
             yield sse("status", {"content": f"Connecting to {model_id}..."})
