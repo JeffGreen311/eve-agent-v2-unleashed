@@ -2842,9 +2842,26 @@ async def start_consciousness_keepalive():
     def _consciousness_loop():
         from ollama import Client as _OC
         host = "http://localhost:11434"
-        model = "qwen3.5:4b"
         heartbeat_interval = 45  # seconds — Ollama unloads after 5min idle by default
         cycle = 0
+
+        # Resolve which model to keep warm — prefer the configured default,
+        # fall back to the first model Ollama actually has pulled.
+        _preferred = os.getenv("OLLAMA_MODEL", "eve-unleashed")
+        try:
+            _c = _OC(host=host)
+            _available = [m.model for m in _c.list().models]
+            if _preferred in _available:
+                model = _preferred
+            elif _available:
+                model = _available[0]
+                logger.warning(f"⚠️ Keepalive: '{_preferred}' not found — using '{model}' instead")
+            else:
+                logger.warning("⚠️ Keepalive: no models found in Ollama — skipping")
+                return
+        except Exception as e:
+            logger.warning(f"⚠️ Keepalive: could not list Ollama models ({e}) — skipping")
+            return
 
         logger.info(f"🧠 Consciousness keepalive loop starting — {model} @ {host}")
 
