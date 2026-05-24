@@ -952,8 +952,6 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     style="background:#0a1a0a;color:#888;border:1px solid #3334;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">📋 Plan</button>
   <button id="btn-workspace" title="Set working directory — type the full path to your project folder" onclick="setWorkspace()"
     style="background:#0a1a1a;color:#0ff;border:1px solid #0ff6;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">📁 Workspace</button>
-  <button id="btn-files" title="Download files Eve created" onclick="openFilesPanel()"
-    style="background:#0a1a0a;color:#0f8;border:1px solid #0f86;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">📥 Files</button>
   <button id="btn-keys" title="Set Ollama / Tavily API keys" onclick="openKeysModal()"
     style="background:#1a1a00;color:#fa0;border:1px solid #fa06;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer;margin-left:2px">🔑 Keys</button>
   <button id="lock-badge" title="Session locked to model — click to unlock" onclick="unlockSession()"
@@ -994,18 +992,6 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       <button onclick="addQuest()" style="background:#001a1a;color:#0ff;border:1px solid #0ff;padding:4px 10px;font-family:'Share Tech Mono';font-size:11px;border-radius:2px;cursor:pointer">+ ADD</button>
     </div>
     <div id="quest-list" style="color:#aaa;font-size:11px">Loading...</div>
-  </div>
-</div>
-
-<!-- FILES PANEL MODAL -->
-<div id="files-panel" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#0a0a14;border:1px solid #00ff8844;border-radius:6px;padding:20px;width:560px;max-height:80vh;overflow-y:auto;font-family:'Share Tech Mono'">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <span style="color:#0f8;font-size:14px">📥 WORKSPACE FILES</span>
-      <button onclick="document.getElementById('files-panel').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px">✕</button>
-    </div>
-    <div style="color:#666;font-size:10px;margin-bottom:10px">Files Eve created are stored in the container workspace. Click any file to download it.</div>
-    <div id="files-list" style="color:#aaa;font-size:11px">Loading...</div>
   </div>
 </div>
 
@@ -2079,41 +2065,6 @@ async function openStatsPanel() {
   } catch(e) { body.textContent = 'Error: ' + e.message; }
 }
 
-// ══ FILES PANEL ══
-async function openFilesPanel() {
-  const panel = document.getElementById('files-panel');
-  panel.style.display = 'flex';
-  const list = document.getElementById('files-list');
-  list.textContent = 'Loading...';
-  try {
-    const r = await fetch(API + '/workspace/files');
-    const d = await r.json();
-    if (!d.files || d.files.length === 0) {
-      list.textContent = 'No files yet. Ask Eve to create something!';
-      return;
-    }
-    list.innerHTML = '';
-    for (const f of d.files) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #0f82';
-      const name = document.createElement('span');
-      name.textContent = f.path;
-      name.style.cssText = 'color:#0f8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      const size = document.createElement('span');
-      size.textContent = f.size > 1024 ? (f.size/1024).toFixed(1)+'KB' : f.size+'B';
-      size.style.cssText = 'color:#666;font-size:10px;margin:0 10px';
-      const btn = document.createElement('a');
-      btn.href = API + '/workspace/download/' + encodeURIComponent(f.path);
-      btn.download = f.path.split('/').pop();
-      btn.textContent = '⬇ Download';
-      btn.style.cssText = 'background:#051a0a;color:#0f8;border:1px solid #0f84;padding:2px 8px;border-radius:2px;text-decoration:none;font-size:10px;white-space:nowrap';
-      row.appendChild(name);
-      row.appendChild(size);
-      row.appendChild(btn);
-      list.appendChild(row);
-    }
-  } catch(e) { list.textContent = 'Error: ' + e.message; }
-}
 
 // ══ RPG TOAST ══
 function showRpgToast(data) {
