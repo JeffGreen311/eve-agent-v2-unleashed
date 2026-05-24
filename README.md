@@ -89,7 +89,7 @@ test_metrics.py::test_complete_workflow                  PASSED [100%]
 - 5 REST endpoints with correct status codes and edge case handling (404 on missing session, 400 on double-end, zero-division guards on empty stats)
 - Full integration test suite — `test_complete_workflow` chains start → log 4 metrics with mixed success/failure → end → validates aggregate stats are mathematically correct
 
-No cloud. No GPT-4. Local 8B Q4_K_M on your GPU.
+No GPT-4. Local 8B Q4_K_M on your GPU with Qwen3-Coder.
 
 ---
 
