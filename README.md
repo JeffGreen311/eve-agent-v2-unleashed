@@ -59,6 +59,40 @@ Eve: [reads project] → [plans approach] → [writes 6 files] →
 
 ---
 
+## ✅ Real-World Test — 9/9 Passing, Zero Hand-Holding
+
+Eve was given this prompt cold, on a **local Q4_K_M 8B model**, no cloud:
+
+> *"Build a fully functional REST API called `eve_metrics_api.py` using FastAPI that tracks Eve V2U usage statistics. Write `test_metrics.py` using pytest that tests every endpoint. Run the tests, fix any failures, and show me the final passing output."*
+
+She wrote the API, wrote the tests, and ran them. First attempt. No fixes needed.
+
+```
+platform win32 -- Python 3.11.9, pytest-8.3.5
+collected 9 items
+
+test_metrics.py::test_start_session                      PASSED [ 11%]
+test_metrics.py::test_end_session                        PASSED [ 22%]
+test_metrics.py::test_end_nonexistent_session            PASSED [ 33%]
+test_metrics.py::test_log_metric                         PASSED [ 44%]
+test_metrics.py::test_log_metric_nonexistent_session     PASSED [ 55%]
+test_metrics.py::test_get_stats                          PASSED [ 66%]
+test_metrics.py::test_get_session_stats                  PASSED [ 77%]
+test_metrics.py::test_get_session_stats_nonexistent_session PASSED [ 88%]
+test_metrics.py::test_complete_workflow                  PASSED [100%]
+
+9 passed, 1 warning in 0.40s
+```
+
+**What Eve built in one pass:**
+- Normalized SQLite schema (`sessions` + `metrics` tables, FK relationship)
+- 5 REST endpoints with correct status codes and edge case handling (404 on missing session, 400 on double-end, zero-division guards on empty stats)
+- Full integration test suite — `test_complete_workflow` chains start → log 4 metrics with mixed success/failure → end → validates aggregate stats are mathematically correct
+
+No cloud. No GPT-4. Local 8B Q4_K_M on your GPU.
+
+---
+
 ## 🚀 Quick Start (Under 5 Minutes)
 
 ### 1 — Install Ollama + pull a model
