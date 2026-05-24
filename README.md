@@ -61,7 +61,7 @@ Eve: [reads project] → [plans approach] → [writes 6 files] →
 
 ## ✅ Real-World Test — 9/9 Passing, Zero Hand-Holding
 
-Eve was given this prompt cold, on a **qwen3-coder:480b-cloudl**, no cloud:
+Eve was given this prompt cold, on a **qwen3-coder:480b-cloudl**
 
 > *"Build a fully functional REST API called `eve_metrics_api.py` using FastAPI that tracks Eve V2U usage statistics. Write `test_metrics.py` using pytest that tests every endpoint. Run the tests, fix any failures, and show me the final passing output."*
 
