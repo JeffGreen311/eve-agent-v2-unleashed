@@ -343,6 +343,18 @@ pip install python-telegram-bot
 
 ---
 
+## 🧠 Intelligence Improvements (v2.2)
+
+- **Mid-loop complexity escalation** (`eve_complexity_tracker.py`) — per-round delta gating escalates from 8B → 480B only when complexity is *rising* across consecutive rounds, not when it crosses an absolute threshold. Avoids burning cloud tokens on the normal first-round burst.
+- **Reversible de-escalation** — after the 480B clears a hard step, if the last 3 rounds are all trivial (read-only tools, no errors, <500 token delta), the session lock is released and the next request re-routes back to local automatically.
+- **Smart read-only routing** — `auto_route_model()` short-circuits on read-only intent patterns ("read X and tell me", "what's in X", "explain X.py") *before* heavy-keyword heuristics fire, preventing simple file reads from being mis-routed to 480B.
+- **8B model native tool calling** — the Eve 3.5 4B Merged model now uses Ollama's Qwen3.5 `RENDERER`/`PARSER` instead of a raw prompt template, enabling full tool calling on the local model without cloud fallback.
+- **Ollama 400 graceful fallback** — if Ollama rejects a model with status 400 ("does not support tools"), the server caches the rejection in `_runtime_no_tools` and retries without tools automatically — no crash, no hang.
+- **think=False explicit suppression** — all model calls now pass `think=False` explicitly when `model_cfg.think` is false, preventing Qwen3.5's renderer from silently entering a 120-second thinking loop on non-reasoning models.
+- **ComplexityTracker test suite** — 14 unit tests in `test_complexity_tracker.py` covering delta gating, spike detection, error floor, de-escalation guards, checkpoint token budgeting, and one-shot escalation.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] 40-round agentic tool loop with streaming SSE
@@ -356,6 +368,11 @@ pip install python-telegram-bot
 - [x] Telegram bridge — push notifications + mobile chat
 - [x] Intent-aware tool routing (v2.1)
 - [x] Smart context trimming (v2.1)
+- [x] Mid-loop complexity escalation — 8B → 480B → 8B (v2.2)
+- [x] Smart read-only routing — short-circuit before heavy-keyword check (v2.2)
+- [x] 8B model native Qwen3.5 tool calling via RENDERER/PARSER (v2.2)
+- [x] Ollama 400 graceful tools fallback with `_runtime_no_tools` cache (v2.2)
+- [x] ComplexityTracker test suite — 14 unit tests (v2.2)
 - [ ] **Voice input / TTS output**
 - [ ] **Multi-file project context awareness** (auto-load OLLAMA.md)
 - [ ] **Plugin marketplace** for community-built tools
@@ -374,6 +391,7 @@ eve-agent-v2-unleashed/
 ├── eve_server.py              # FastAPI backend — SSE streaming, workspace API, model routing
 ├── agent.py                   # EveAgent orchestrator — tool loop, memory, emotional state
 ├── eve_tool_router.py         # Intent classifier — decides when tools are needed
+├── eve_complexity_tracker.py  # Per-round delta gating — mid-loop 8B→480B escalation/de-escalation
 ├── eve_task_context.py        # Multi-step task tracker — prevents task abandonment
 ├── eve_context_manager.py     # Context trimming and compaction utilities
 ├── eve_quest_system.py        # Background quest runner — watches workspace/quests/
