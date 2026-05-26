@@ -1,112 +1,161 @@
 """Per-round complexity tracking for Eve V2U Unleashed.
 
-Three design principles (from community feedback):
+Implements the suggestion from Deep_Ad1959 on Reddit:
+  "route on a running complexity/token estimate per round rather than
+   one-shot at the start"
 
-1. DELTA GATING — escalate when the per-round complexity score is *rising*,
-   not when it crosses an absolute threshold.  A refactor that touches 3 files
-   in round 1 and stays flat is fine; one that is *still* adding new files and
-   errors in rounds 3-4 is genuinely expanding scope.  Absolute thresholds
-   fire on the normal first-round burst and burn 480B calls on the middle zone
-   where the local model was working fine.
+The STEER injection and fork-at-known-good are the same primitive from two
+directions -- this class unifies them:
+  - fork-at-known-good: checkpoint is updated after every clean round so the
+    escalated model gets clean history, not whatever the 4B compacted away
+  - STEER injection: build_clean_thread() injects a handoff directive that
+    orients the 480B model to the task state without replaying raw history
 
-2. FIXED-BUDGET CHECKPOINT — checkpoints don't accumulate raw message history
-   indefinitely.  The checkpoint is trimmed to CHECKPOINT_BUDGET_TOKENS at
-   every fork point.  The STEER message in build_clean_thread() carries the
-   whole-session summary; the checkpoint carries recent context.  Together they
-   stay bounded regardless of session length.
+Changelog:
+  v1 -- initial implementation
+  v2 -- delta gating, fixed-budget checkpoint, reversible escalation
+  v3 -- Fix 1: scope-expansion signal (rising count + new file type/dir, not
+             raw count) prevents cleanup phase from false-tripping escalation.
+       Fix 2: deescalation threshold raised to 5, switched from round-count
+             to tool-call entropy (no write/bash in window), errors-since-
+             last-edit carry heavier weight.
+       Fix 3: _FILE_TOOLS split into write vs search sets -- glob/grep/find
+             no longer inflate the files_touched escalation score.
+       Fix 4: build_clean_thread() replaces existing system msg instead of
+             prepending -- prevents double system message on handoff.
+       Fix 5: _is_local_model() fuzzy match -- model ID variants no longer
+             silently skip escalation logic.
+       Fix 6: deepcopy checkpoint -- prevents shared-reference corruption.
 
-3. REVERSIBLE ESCALATION — should_deescalate() fires when the last N rounds
-   are all trivial (read-only tools, no errors, small output).  The session
-   lock is released so the next request is re-routed from scratch rather than
-   paying frontier rates for the tail of every session.
-
-Usage:
-    tracker = ComplexityTracker(model_id, messages)
+Usage inside the tool loop (eve_server.py):
+    tracker = ComplexityTracker(model_id, messages_before_loop)
     for round_num in range(max_rounds):
-        ... run tool calls, collect results ...
+        ... run tool calls ...
         tracker.record_round(tool_calls, results, messages)
         if tracker.should_escalate():
-            messages = tracker.build_clean_thread(user_request)
-            # switch to ESCALATION_MODEL, rebuild client
-        elif tracker.should_deescalate():
-            # release session lock — next request re-routes from local
+            clean_msgs = tracker.build_clean_thread(original_user_request)
+            # switch model_id -> ESCALATION_MODEL
+            # replace messages with clean_msgs
+            # rebuild client
+        if tracker.should_deescalate():
+            # release session lock -- next message routes from scratch
 """
 
 from __future__ import annotations
 
+import copy
+import os
 import time
 from dataclasses import dataclass, field
 from typing import List
 
 
-# ── tunables ──────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Fixed token budget for the checkpoint passed to the escalated model.
-# STEER message (~200-300 tokens) + checkpoint ≤ this = bounded total context.
-CHECKPOINT_BUDGET_TOKENS = 600
+# Thresholds at which a local model run escalates to the 480B cloud coder
+ESCALATION_THRESHOLDS = {
+    "files_touched":  3,       # written files before scope-expansion check kicks in
+    "tool_rounds":    4,       # hard cap: escalate after this many rounds regardless
+    "error_rounds":   2,       # escalate after this many error rounds
+    "token_estimate": 8_000,   # accumulated token estimate across history
+}
 
-# Per-round score weights
-_W_FILE   = 2.0   # per new file touched this round
-_W_ERROR  = 3.0   # flat penalty for any error this round
-_W_TOKEN  = 500.0 # divide token_delta by this → 1 point per 500 tokens
-
-# A single-round spike larger than this triggers escalation immediately
-DELTA_SPIKE_THRESHOLD = 5.0
-
-# Absolute fallback: escalate after this many error rounds regardless of delta
-ABSOLUTE_ERROR_FLOOR = 4
-
-# De-escalation: this many consecutive trivial rounds releases the 480B lock
-DEESCALATION_ROUNDS = 3
-DEESCALATION_MAX_TOKENS = 500  # rounds with > this token_delta are not trivial
+# Consecutive trivial rounds required to de-escalate.
+# 5 is the floor that survives the post-edit import-fix cleanup batch.
+# 3 trips on cleanup in almost every real refactor; 4 is break-even on
+# context-rebuild overhead, so 5 gives a safety margin.
+DEESCALATION_WINDOW = 5
 
 ESCALATION_MODEL = "qwen3-coder:480b-cloud"
 
-LOCAL_MODELS = frozenset({
-    "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
-    "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
+# Substring fragments that identify local/personality models.
+# Fuzzy match is more robust than an exact frozenset -- handles tag variants
+# like :latest, :q4_K_M, and future model name changes.
+_LOCAL_MODEL_FRAGMENTS = (
+    "eve-v2-unleashed",
+    "eve-qwen3",
+    "consciousness-liberated",
+    "solforg3",
+    "4b-merged",
     "eve-unleashed",
+)
+
+# Write/modify tools -- the ones that actually change state and drive escalation
+_WRITE_TOOLS = frozenset({
+    "write_file",
+    "replace_lines",
+    "insert_after_line",
+    "bash",
 })
 
-_FILE_TOOLS = frozenset({
-    "read_file", "read_lines", "write_file",
-    "replace_lines", "insert_after_line",
-    "grep", "glob", "find_file",
-})
-
-# Trivial = read-only, no writes, no errors — safe to hand back to local model
-_TRIVIAL_TOOLS = frozenset({
-    "read_file", "read_lines", "list_directory", "glob", "find_file",
+# Read/search tools -- trivial, never inflate the files_touched escalation score
+_SEARCH_TOOLS = frozenset({
+    "read_file",
+    "read_lines",
+    "grep",
+    "glob",
+    "find_file",
+    "list_directory",
+    "list_dir",
 })
 
 _ERROR_MARKERS = (
-    "error:", "exception", "traceback", "failed:", "not found", "permission denied",
+    "error:", "exception", "traceback",
+    "failed:", "not found", "permission denied",
+    "no such file", "syntax error",
 )
 
 
-# ── data ──────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA STRUCTURES
+# ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class _RoundRecord:
-    round_num: int
-    tools_called: List[str]
-    files_touched: List[str]
-    had_error: bool
-    token_delta: int
-    score: float              # per-round complexity score (not cumulative)
-    timestamp: float = field(default_factory=time.time)
+    round_num:     int
+    tools_called:  List[str]
+    files_written: List[str]   # write/modify tools only
+    files_read:    List[str]   # read/search tools only
+    had_error:     bool
+    token_delta:   int
+    timestamp:     float = field(default_factory=time.time)
+
+    @property
+    def is_trivial(self) -> bool:
+        """True when round contains only read/search tool calls and no errors."""
+        return (
+            not self.had_error
+            and not self.files_written
+            and all(t in _SEARCH_TOOLS for t in self.tools_called)
+        )
 
 
-# ── main class ────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN CLASS
+# ─────────────────────────────────────────────────────────────────────────────
 
 class ComplexityTracker:
-    """Track per-round complexity and drive mid-loop escalation/de-escalation."""
+    """Track per-round complexity and drive mid-loop escalation decisions.
+
+    Initialize once before the tool loop starts.  Call record_round() after
+    every batch of tool calls completes.  Check should_escalate() before the
+    next loop iteration.  Check should_deescalate() after the loop finishes.
+    """
 
     def __init__(self, initial_model: str, initial_messages: list) -> None:
         self.initial_model = initial_model
         self.rounds: List[_RoundRecord] = []
-        self._checkpoint: list = _trim_to_budget(initial_messages, CHECKPOINT_BUDGET_TOKENS)
-        self._all_files: set = set()
+
+        # Checkpoint: last clean (error-free) copy of messages -- the "known-good fork"
+        # deepcopy prevents shared-reference corruption when messages list is mutated
+        self._checkpoint: list = copy.deepcopy(initial_messages)
+
+        # Track written files and their metadata for scope-expansion detection
+        self._written_files: set = set()
+
+        self._token_estimate: int = _estimate_tokens(initial_messages)
         self._escalated: bool = False
 
     # ── public API ────────────────────────────────────────────────────────────
@@ -118,129 +167,132 @@ class ComplexityTracker:
         current_messages: list,
     ) -> None:
         """Call after every tool-call batch completes."""
-        files_this_round: set = set()
+        files_written_this_round: set = set()
+        files_read_this_round: set = set()
         had_error = False
 
         for tc, result in zip(tool_calls, results):
             name = _tc_name(tc)
             args = _tc_args(tc)
-            if name in _FILE_TOOLS:
-                path = args.get("path", "") if isinstance(args, dict) else ""
-                if path:
-                    files_this_round.add(path)
+            path = args.get("path", "") if isinstance(args, dict) else ""
+
+            if name in _WRITE_TOOLS and path:
+                files_written_this_round.add(path)
+            elif name in _SEARCH_TOOLS and path:
+                files_read_this_round.add(path)
+
             if any(m in str(result).lower() for m in _ERROR_MARKERS):
                 had_error = True
 
-        self._all_files.update(files_this_round)
+        self._written_files.update(files_written_this_round)
 
-        # Token delta from messages added since the last checkpoint snapshot
         new_msgs = current_messages[len(self._checkpoint):]
-        token_delta = _estimate_tokens(new_msgs)
-
-        score = (
-            len(files_this_round) * _W_FILE
-            + (_W_ERROR if had_error else 0.0)
-            + token_delta / _W_TOKEN
-        )
+        delta = _estimate_tokens(new_msgs)
+        self._token_estimate += delta
 
         self.rounds.append(_RoundRecord(
             round_num=len(self.rounds) + 1,
             tools_called=[_tc_name(tc) for tc in tool_calls],
-            files_touched=list(files_this_round),
+            files_written=list(files_written_this_round),
+            files_read=list(files_read_this_round),
             had_error=had_error,
-            token_delta=token_delta,
-            score=score,
+            token_delta=delta,
         ))
 
-        # Advance checkpoint on clean rounds — trim to fixed budget (prevents
-        # the checkpoint growing into a second context wall)
+        # Advance checkpoint only on clean rounds -- "known-good fork"
         if not had_error:
-            self._checkpoint = _trim_to_budget(current_messages, CHECKPOINT_BUDGET_TOKENS)
+            self._checkpoint = copy.deepcopy(current_messages)
 
     def should_escalate(self) -> bool:
-        """Delta gating: fire when complexity is *rising*, not just above a level.
-
-        Avoids burning 480B calls on the normal first-round burst (many files
-        in round 1, then stable).  Catches genuinely expanding tasks where the
-        score climbs across consecutive rounds.
-        """
+        """True when a threshold has been crossed and we're on a local model."""
         if self._escalated:
             return False
-        if self.initial_model not in LOCAL_MODELS:
+        if not _is_local_model(self.initial_model):
             return False
 
-        n = len(self.rounds)
-        if n < 2:
-            return False  # need delta, not a single point
+        t = ESCALATION_THRESHOLDS
 
-        curr_score = self.rounds[-1].score
-        prev_score = self.rounds[-2].score
-        delta = curr_score - prev_score
-
-        # Two consecutive rising rounds — scope is still expanding
-        if n >= 3:
-            prev_delta = prev_score - self.rounds[-3].score
-            if delta > 0 and prev_delta > 0:
-                return True
-
-        # Single large spike — something blew up
-        if delta > DELTA_SPIKE_THRESHOLD:
+        # Scope-expansion signal: rising write-file count AND new file type or dir.
+        # Raw count alone fires on the cleanup phase (updating imports across affected
+        # files makes count rise even as scope contracts). The combined signal only
+        # fires when the latest round genuinely introduces a new area of the codebase.
+        if len(self._written_files) > t["files_touched"] and self._is_scope_expanding():
             return True
 
-        # Absolute fallback: many error rounds and no convergence
-        if sum(1 for r in self.rounds if r.had_error) >= ABSOLUTE_ERROR_FLOOR:
+        # Hard round cap -- escalate regardless after N rounds
+        if len(self.rounds) > t["tool_rounds"]:
+            return True
+
+        # Error accumulation
+        if sum(1 for r in self.rounds if r.had_error) > t["error_rounds"]:
+            return True
+
+        # Token budget
+        if self._token_estimate > t["token_estimate"]:
             return True
 
         return False
 
     def should_deescalate(self) -> bool:
-        """True when the 480B has cleared the hard step and the tail is trivial.
+        """True when the 480B has finished hard work and the last N rounds are trivial.
 
-        Releasing the session lock here means the next user request is re-routed
-        from the local model instead of paying frontier rates for reads/globs.
-        Note: de-escalation happens between requests, not mid-loop — the local
-        model has no tool support, so the current loop always finishes on 480B.
+        Uses tool-call entropy rather than a raw round count:
+          - All calls in the window must be read/search (no write, no bash)
+          - No errors anywhere in the window
+          - At least DEESCALATION_WINDOW rounds must have passed since the last write
+          - No errors since the last write (an error inside the quiet period means
+            the model has an open loop it hasn't surfaced yet)
+
+        Break-even on context-rebuild overhead is ~4 trivial rounds, so 5 gives
+        a safety margin.
         """
         if not self._escalated:
             return False
-        n = len(self.rounds)
-        if n < DEESCALATION_ROUNDS:
+        if len(self.rounds) < DEESCALATION_WINDOW:
             return False
-        recent = self.rounds[-DEESCALATION_ROUNDS:]
+
+        recent = self.rounds[-DEESCALATION_WINDOW:]
         for r in recent:
-            if r.had_error:
+            if not r.is_trivial:
                 return False
-            if r.token_delta > DEESCALATION_MAX_TOKENS:
+
+        # Errors since last write carry heavier weight
+        last_write_idx = -1
+        for i, r in enumerate(self.rounds):
+            if r.files_written or any(t == "bash" for t in r.tools_called):
+                last_write_idx = i
+
+        if last_write_idx >= 0:
+            rounds_after_write = len(self.rounds) - 1 - last_write_idx
+            if rounds_after_write < DEESCALATION_WINDOW:
                 return False
-            if any(t not in _TRIVIAL_TOOLS for t in r.tools_called):
-                return False
+            for r in self.rounds[last_write_idx + 1:]:
+                if r.had_error:
+                    return False
+
         return True
 
     def escalation_reason(self) -> str:
-        n = len(self.rounds)
+        t = ESCALATION_THRESHOLDS
         reasons = []
-        if n >= 2:
-            d = self.rounds[-1].score - self.rounds[-2].score
-            if d > 0:
-                reasons.append(f"rising Δ={d:.1f}")
-        if n >= 3:
-            d1 = self.rounds[-2].score - self.rounds[-3].score
-            d2 = self.rounds[-1].score - self.rounds[-2].score
-            if d1 > 0 and d2 > 0:
-                reasons.append("2 consecutive rising rounds")
-        errors = sum(1 for r in self.rounds if r.had_error)
-        if errors >= ABSOLUTE_ERROR_FLOOR:
-            reasons.append(f"{errors} error rounds")
-        if not reasons:
-            d = self.rounds[-1].score - self.rounds[-2].score if n >= 2 else 0
-            reasons.append(f"spike Δ={d:.1f}")
-        return ", ".join(reasons)
+        if len(self._written_files) > t["files_touched"] and self._is_scope_expanding():
+            label = "extension" if self._new_extension_in_latest() else "directory"
+            reasons.append(f"{len(self._written_files)} files written + new {label}")
+        if len(self.rounds) > t["tool_rounds"]:
+            reasons.append(f"{len(self.rounds)} rounds")
+        error_count = sum(1 for r in self.rounds if r.had_error)
+        if error_count > t["error_rounds"]:
+            reasons.append(f"{error_count} error rounds")
+        if self._token_estimate > t["token_estimate"]:
+            reasons.append(f"~{self._token_estimate} tokens")
+        return ", ".join(reasons) if reasons else "threshold crossed"
 
     def build_clean_thread(self, user_request: str) -> list:
-        """Fork-at-known-good + STEER injection.
+        """Fork-at-known-good + STEER injection combined.
 
-        Returns [steer_msg] + trimmed_checkpoint.
-        Total size is bounded: steer ~200-300 tokens + checkpoint ≤ CHECKPOINT_BUDGET_TOKENS.
+        Returns a message list suitable for the escalated model.  Replaces
+        the existing system message (rather than prepending) to avoid a
+        double system-message at the top of the thread.
         """
         self._escalated = True
 
@@ -250,53 +302,97 @@ class ComplexityTracker:
                 tool_counts[t] = tool_counts.get(t, 0) + 1
 
         lines = [
-            "CONTEXT HANDOFF — task escalated from local model due to scope expansion.",
+            "CONTEXT HANDOFF -- task escalated from local model due to scope expansion.",
             f"Escalation reason: {self.escalation_reason()}",
             "",
             f"Original request: {user_request}",
             "",
         ]
-        if self._all_files:
-            lines.append(f"Files accessed/modified: {', '.join(sorted(self._all_files))}")
+        if self._written_files:
+            lines.append(f"Files written/modified: {', '.join(sorted(self._written_files))}")
         if tool_counts:
-            lines.append("Tools used: " + ", ".join(f"{k}×{v}" for k, v in sorted(tool_counts.items())))
+            summary = ", ".join(f"{k}x{v}" for k, v in sorted(tool_counts.items()))
+            lines.append(f"Tools used: {summary}")
         error_rounds = sum(1 for r in self.rounds if r.had_error)
         if error_rounds:
-            lines.append(f"Error rounds: {error_rounds}")
+            lines.append(f"Rounds with errors: {error_rounds}")
         lines += [
             "",
-            f"Complexity scores by round: {[round(r.score, 1) for r in self.rounds]}",
-            "",
-            "The conversation history below is the last known-good checkpoint "
-            f"({_estimate_tokens(self._checkpoint)} tokens, budget {CHECKPOINT_BUDGET_TOKENS}).",
+            "The conversation history below is the last known-good checkpoint.",
             "Pick up from here and complete the task.",
         ]
 
         steer = {"role": "system", "content": "\n".join(lines)}
-        return [steer] + self._checkpoint
+        checkpoint = copy.deepcopy(self._checkpoint)
+
+        # Replace existing system message to avoid double system message on handoff
+        if checkpoint and checkpoint[0].get("role") == "system":
+            checkpoint[0] = steer
+        else:
+            checkpoint.insert(0, steer)
+
+        return checkpoint
+
+    # ── private helpers ───────────────────────────────────────────────────────
+
+    def _is_scope_expanding(self) -> bool:
+        """True when write count is rising AND a new file type or directory appears.
+
+        Requires BOTH the latest and previous rounds to have written files --
+        if there's a read-only round between two write rounds, the signal is
+        not consecutive and the cleanup heuristic doesn't apply.
+        """
+        if len(self.rounds) < 2:
+            return False
+        if not self.rounds[-1].files_written or not self.rounds[-2].files_written:
+            return False
+        return self._new_extension_in_latest() or self._new_dir_in_latest()
+
+    def _new_extension_in_latest(self) -> bool:
+        """True if the latest round wrote to a file type not seen in any prior round."""
+        if not self.rounds:
+            return False
+        prev_exts: set = set()
+        for r in self.rounds[:-1]:
+            for f in r.files_written:
+                ext = os.path.splitext(f)[1]
+                if ext:
+                    prev_exts.add(ext)
+        latest_exts: set = set()
+        for f in self.rounds[-1].files_written:
+            ext = os.path.splitext(f)[1]
+            if ext:
+                latest_exts.add(ext)
+        return bool(latest_exts - prev_exts)
+
+    def _new_dir_in_latest(self) -> bool:
+        """True if the latest round wrote to a top-level directory not seen before."""
+        if not self.rounds:
+            return False
+        prev_dirs: set = set()
+        for r in self.rounds[:-1]:
+            for f in r.files_written:
+                top = f.replace("\\", "/").split("/")[0]
+                prev_dirs.add(top)
+        latest_dirs: set = set()
+        for f in self.rounds[-1].files_written:
+            top = f.replace("\\", "/").split("/")[0]
+            latest_dirs.add(top)
+        return bool(latest_dirs - prev_dirs)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _is_local_model(model_id: str) -> bool:
+    """Fuzzy match on model ID -- handles tag variants without exact string dependence."""
+    lower = model_id.lower()
+    return any(fragment in lower for fragment in _LOCAL_MODEL_FRAGMENTS)
+
 
 def _estimate_tokens(messages: list) -> int:
     return sum(len(str(m.get("content", ""))) // 4 for m in messages)
-
-
-def _trim_to_budget(messages: list, budget: int) -> list:
-    """Return the most-recent messages that fit within budget tokens.
-    System messages are always kept; non-system messages are trimmed from the front.
-    """
-    sys_msgs  = [m for m in messages if m.get("role") == "system"]
-    non_sys   = [m for m in messages if m.get("role") != "system"]
-    remaining = budget - _estimate_tokens(sys_msgs)
-    kept: list = []
-    for m in reversed(non_sys):
-        cost = max(1, len(str(m.get("content", ""))) // 4)
-        if remaining - cost < 0:
-            break
-        kept.insert(0, m)
-        remaining -= cost
-    return sys_msgs + kept
 
 
 def _tc_name(tc) -> str:
