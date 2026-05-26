@@ -1250,6 +1250,10 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
         _loop_start = time.time()
         logger.info(f"  📋 Mode: {'AGENT (tools always available, {max_rounds} rounds)' if supports_tools else 'CONVERSATION'}")
 
+        # Mid-loop complexity tracker — re-routes to 480B if scope expands
+        from eve_complexity_tracker import ComplexityTracker, ESCALATION_MODEL as _ESC_MODEL
+        _tracker = ComplexityTracker(model_id, messages)
+
         for round_num in range(max_rounds):
             if time.time() - _loop_start > MAX_LOOP_SECONDS:
                 logger.warning(f"  ⏱️  Loop timeout after {MAX_LOOP_SECONDS}s at round {round_num} — breaking")
@@ -1291,6 +1295,7 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
             messages.append(msg)
 
             if msg.tool_calls:
+                _round_results: list[str] = []   # collect results for tracker
                 for tc in msg.tool_calls:
                     fn_name = tc.function.name
                     fn_args = tc.function.arguments if isinstance(tc.function.arguments, dict) else {}
@@ -1331,6 +1336,27 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
                         tool_log[-1]["error"] = result
 
                     messages.append({"role": "tool", "tool_name": fn_name, "content": result})
+                    _round_results.append(result)
+
+                # Per-round complexity check — re-route mid-loop if scope expanded
+                _tracker.record_round(msg.tool_calls, _round_results, messages)
+                if _tracker.should_escalate() and model_id != _ESC_MODEL:
+                    _reason = _tracker.escalation_reason()
+                    logger.info(f"  🚀 Mid-loop escalation → {_ESC_MODEL} ({_reason})")
+                    # Build clean thread: fork-at-known-good + STEER injection
+                    messages = _tracker.build_clean_thread(req.message)
+                    model_id = _ESC_MODEL
+                    session_model_lock[sid] = model_id
+                    model_cfg = _get_model_cfg(model_id)
+                    model_id = model_cfg.get("id", model_id)
+                    supports_tools = model_cfg.get("tools", False)
+                    _api_key = os.environ.get("OLLAMA_API_KEY", "")
+                    client = OllamaClient(
+                        host=model_cfg["url"],
+                        headers={"Authorization": f"Bearer {_api_key}"} if _api_key else {},
+                    )
+                    final_content = ""  # discard local partial response
+                    logger.info(f"  ✅ Escalated to {model_id} with {len(messages)}-message clean thread")
             else:
                 break  # No more tool calls — done
 
