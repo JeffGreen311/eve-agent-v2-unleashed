@@ -1267,7 +1267,7 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
         final_content = ""
 
         # ALWAYS provide tools (except models that don't support them)
-        supports_tools = model_cfg.get("tools", False) and model_id not in _runtime_no_tools
+        supports_tools = model_cfg.get("tools", False) and not _no_tools_active(model_id)
         max_rounds = 10 if supports_tools else 1
         MAX_LOOP_SECONDS = agent_settings.get("max_loop_seconds", 120)
         _loop_start = time.time()
@@ -1384,7 +1384,7 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
                     session_model_lock[sid] = model_id
                     model_cfg = _get_model_cfg(model_id)
                     model_id = model_cfg.get("id", model_id)
-                    supports_tools = model_cfg.get("tools", False) and model_id not in _runtime_no_tools
+                    supports_tools = model_cfg.get("tools", False) and not _no_tools_active(model_id)
                     _api_key = os.environ.get("OLLAMA_API_KEY", "")
                     client = OllamaClient(
                         host=model_cfg["url"],
@@ -1519,7 +1519,22 @@ class _InlineThinkExtractor:
         return c, ""
 
 
-_runtime_no_tools: set = set()  # models that returned 400 "does not support tools" at runtime
+_runtime_no_tools: dict = {}  # model_id -> timestamp of 400 "does not support tools" rejection
+
+_NO_TOOLS_RETRY_AFTER = 300  # seconds — re-try tool calling after this long
+
+def _no_tools_active(model_id: str) -> bool:
+    """True when model_id is in the rejection cache and the entry has not expired.
+    Expired entries are removed so a Modelfile update / model reload recovers automatically.
+    """
+    ts = _runtime_no_tools.get(model_id)
+    if ts is None:
+        return False
+    if time.time() - ts > _NO_TOOLS_RETRY_AFTER:
+        _runtime_no_tools.pop(model_id, None)
+        logger.info(f"  ♻️  {model_id} no-tools cache expired — will retry tool calling")
+        return False
+    return True
 
 
 async def _iter_ollama_async(client, chat_kwargs: dict, sid: str):
@@ -1550,8 +1565,8 @@ async def _iter_ollama_async(client, chat_kwargs: dict, sid: str):
         if isinstance(item, Exception):
             if "does not support tools" in str(item).lower() and "tools" in chat_kwargs:
                 mid = chat_kwargs.get("model", "")
-                _runtime_no_tools.add(mid)
-                logger.warning(f"  ⚠️  {mid} rejected tools (400) — retrying without, caching for session")
+                _runtime_no_tools[mid] = time.time()
+                logger.warning(f"  ⚠️  {mid} rejected tools (400) — retrying without (cache expires in {_NO_TOOLS_RETRY_AFTER}s)")
                 fallback_kw = {k: v for k, v in chat_kwargs.items() if k not in ("tools", "think")}
                 async for chunk in _iter_ollama_async(client, fallback_kw, sid):
                     yield chunk
@@ -1925,7 +1940,7 @@ async def chat_stream(req: ChatRequest):
 
     tools = [read_file, read_lines, write_file, insert_after_line, replace_lines, list_directory, bash, web_search, grep, find_file, glob, web_fetch]
     tool_map = {f.__name__: f for f in tools}
-    supports_tools = model_cfg.get("tools", False) and model_id not in _runtime_no_tools
+    supports_tools = model_cfg.get("tools", False) and not _no_tools_active(model_id)
 
     # Build system prompt
     if req.sub_agent:
@@ -2112,7 +2127,8 @@ CUSTOM INSTRUCTIONS:
             if sid in session_model_lock and session_model_lock[sid] != (req.model or ""):
                 yield sse("session_continuing", {"model": model_id})
 
-            _stream_max_s = agent_settings.get("max_loop_seconds", 120)
+            _default_max_s = 120 if model_cfg.get("cloud") else 300  # local models get more time
+            _stream_max_s = agent_settings.get("max_loop_seconds", _default_max_s)
             for rnd in range(40 if supports_tools else 1):
                 _perf["rounds"] += 1
                 # ── Wall-clock timeout ──
@@ -2373,12 +2389,13 @@ CUSTOM INSTRUCTIONS:
                         if fn in tool_map:
                             _t0 = time.time()
                             try:
-                                result = str(tool_map[fn](**args))[:3000]
+                                # Run tool in a thread — prevents blocking the event loop (critical for bash/subprocess)
+                                result = str(await asyncio.to_thread(tool_map[fn], **args))[:3000]
                                 # Server-side retry once on write failures (transient lock/encoding issues)
                                 if fn in _WRITE_TOOLS and result.startswith("Error:"):
                                     logger.warning(f"  ⚠️ Write '{fn}' failed, retrying: {result[:80]}")
                                     await asyncio.sleep(0.3)
-                                    result = str(tool_map[fn](**args))[:3000]
+                                    result = str(await asyncio.to_thread(tool_map[fn], **args))[:3000]
                                     _perf["retries"] += 1
                                     if not result.startswith("Error:"):
                                         logger.info(f"  ✅ Retry succeeded for '{fn}'")
