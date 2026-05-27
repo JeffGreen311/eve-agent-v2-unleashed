@@ -1293,7 +1293,8 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
         # ALWAYS provide tools (except models that don't support them)
         supports_tools = model_cfg.get("tools", False) and not _no_tools_active(model_id)
         max_rounds = 10 if supports_tools else 1
-        MAX_LOOP_SECONDS = agent_settings.get("max_loop_seconds", 120 if model_cfg.get("cloud") else 300)
+        _default_max_s = 120 if model_cfg.get("cloud") else 300
+        MAX_LOOP_SECONDS = agent_settings.get("max_loop_seconds") or _default_max_s
         _loop_start = time.time()
         logger.info(f"  📋 Mode: {'AGENT (tools always available, {max_rounds} rounds)' if supports_tools else 'CONVERSATION'}")
 
@@ -2208,7 +2209,7 @@ CUSTOM INSTRUCTIONS:
                 yield sse("session_continuing", {"model": model_id})
 
             _default_max_s = 120 if model_cfg.get("cloud") else 300  # local models get more time
-            _stream_max_s = agent_settings.get("max_loop_seconds", _default_max_s)
+            _stream_max_s = agent_settings.get("max_loop_seconds") or _default_max_s
             for rnd in range(40 if supports_tools else 1):
                 _perf["rounds"] += 1
                 # ── Wall-clock timeout ──
@@ -2689,7 +2690,7 @@ async def lock_status(session_id: str = "default"):
 agent_settings: dict = {
     "auto_accept_edits": False,  # OFF = prompt for all destructive tools; ON = auto-accept edits
     "plan_mode": False,
-    "max_loop_seconds": 120,
+    "max_loop_seconds": None,   # None = use per-model default (300s local, 120s cloud)
 }
 
 class SettingsRequest(BaseModel):
