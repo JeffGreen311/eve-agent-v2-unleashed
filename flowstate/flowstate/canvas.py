@@ -217,7 +217,7 @@ class ConnectionPath(QGraphicsPathItem):
         self.dst_node = dst_node
         self.dst_idx = dst_idx
 
-        pen = QPen(_C["conn"], 2)
+        pen = QPen(_C["port_in"], 2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -250,7 +250,7 @@ class ConnectionPath(QGraphicsPathItem):
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         selected = self.isSelected()
-        pen = QPen(_C["node_sel"] if selected else _C["conn"],
+        pen = QPen(_C["node_sel"] if selected else _C["port_in"],
                    3 if selected else 2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
@@ -370,6 +370,11 @@ class WorkflowCanvas(QGraphicsView):
             return
         src = self.node_items[source_id]
         dst = self.node_items[target_id]
+        # Prevent duplicate connections on the same ports
+        for existing in self.connections:
+            if (existing.src_node is src and existing.dst_node is dst
+                    and existing.src_idx == src_port and existing.dst_idx == dst_port):
+                return
         conn = ConnectionPath(src, src_port, dst, dst_port)
         self._scene.addItem(conn)
         self.connections.append(conn)
@@ -386,6 +391,7 @@ class WorkflowCanvas(QGraphicsView):
     def load_workflow_data(self, data: dict):
         for nid in list(self.node_items.keys()):
             self.remove_node(nid)
+        self.node_selected.emit(None)
         from flowstate.nodes import Node
         for nd in data.get("nodes", []):
             self.add_node(Node.from_dict(nd))
@@ -438,12 +444,15 @@ class WorkflowCanvas(QGraphicsView):
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            had_node = any(isinstance(i, NodeItem) for i in self._scene.selectedItems())
             for item in self._scene.selectedItems():
                 if isinstance(item, NodeItem):
                     self.remove_node(item.node.node_id)
                 elif isinstance(item, ConnectionPath):
                     self.connections.remove(item)
                     self._scene.removeItem(item)
+            if had_node:
+                self.node_selected.emit(None)
         super().keyPressEvent(event)
 
     def wheelEvent(self, event):

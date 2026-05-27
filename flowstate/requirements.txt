@@ -1,0 +1,5 @@
+PyQt6
+openpyxl
+requests
+pytest
+ollama

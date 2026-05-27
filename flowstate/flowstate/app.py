@@ -2,20 +2,23 @@
 
 import sys
 import os
+import ast
 import json
 import uuid
-import threading
 from typing import Optional
+
+# Allow running as `python app.py` from inside the package directory
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QMenuBar, QMenu, QToolBar, QStatusBar,
     QMessageBox, QFileDialog, QLabel, QDockWidget,
     QScrollArea, QFrame, QTextEdit, QTabWidget, QLineEdit,
-    QFormLayout, QSplitter, QSizePolicy, QGraphicsView,
+    QFormLayout, QSplitter, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QThread, QTimer
-from PyQt6.QtGui import QAction, QFont, QColor, QIcon, QPalette
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
+from PyQt6.QtGui import QAction, QFont, QColor
 
 from flowstate.canvas import WorkflowCanvas
 from flowstate.nodes import Node, NodeType, PREDEFINED_NODES
@@ -258,12 +261,17 @@ class PropertiesPanel(QWidget):
         self._layout.addWidget(self._title)
         self._layout.addStretch()
 
-    def load_node(self, node: Optional["Node"]):
-        # Clear
-        while self._layout.count():
-            item = self._layout.takeAt(0)
+    @staticmethod
+    def _clear_layout(layout):
+        while layout.count():
+            item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+            elif item.layout():
+                PropertiesPanel._clear_layout(item.layout())
+
+    def load_node(self, node: Optional["Node"]):
+        self._clear_layout(self._layout)
         self._fields.clear()
         self._node = node
 
@@ -328,11 +336,15 @@ class PropertiesPanel(QWidget):
             form = QFormLayout()
             form.setContentsMargins(0, 4, 0, 4)
             form.setSpacing(8)
+            form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
             for key, val in node.properties.items():
                 field = QLineEdit(str(val))
                 field.setPlaceholderText(str(val))
                 field.textChanged.connect(lambda text, k=key: self._on_field_changed(k, text))
-                lbl = QLabel(key.replace("_", " ").title())
+                label_text = key.replace("_", " ").title()
+                lbl = QLabel(label_text)
+                lbl.setMinimumWidth(60)
                 lbl.setStyleSheet("color: #8080a0; font-size: 11px;")
                 form.addRow(lbl, field)
                 self._fields[key] = field
@@ -362,6 +374,7 @@ class FlowStateMainWindow(QMainWindow):
         self.current_workflow_path = None
         self.generated_code = None
         self.generated_tests = None
+        self._last_results = None
         self._gen_worker = None
 
         self._init_ui()
@@ -382,20 +395,74 @@ class FlowStateMainWindow(QMainWindow):
         self._bottom_tabs = QTabWidget()
         self._bottom_tabs.setMinimumHeight(120)
 
+        code_tab = QWidget()
+        code_tab_layout = QVBoxLayout(code_tab)
+        code_tab_layout.setContentsMargins(0, 0, 0, 0)
+        code_tab_layout.setSpacing(0)
+
+        code_toolbar = QWidget()
+        code_toolbar.setStyleSheet("background: #0f0f1a; border-bottom: 1px solid #1a1a2e;")
+        code_tb_layout = QHBoxLayout(code_toolbar)
+        code_tb_layout.setContentsMargins(6, 4, 6, 4)
+        code_tb_layout.setSpacing(6)
+        save_code_btn = self._tb_btn("💾 Save Code…", "Save generated code to .py file",
+                                     self._save_generated_code)
+        save_code_btn.setFixedWidth(130)
+        code_tb_layout.addWidget(save_code_btn)
+        code_tb_layout.addStretch()
+        code_tab_layout.addWidget(code_toolbar)
+
         self._code_view = QTextEdit()
         self._code_view.setReadOnly(True)
         self._code_view.setPlaceholderText("Generated Python code will appear here...")
-        self._bottom_tabs.addTab(self._code_view, "⚡ Generated Code")
+        code_tab_layout.addWidget(self._code_view)
+        self._bottom_tabs.addTab(code_tab, "⚡ Generated Code")
+
+        output_tab = QWidget()
+        output_tab_layout = QVBoxLayout(output_tab)
+        output_tab_layout.setContentsMargins(0, 0, 0, 0)
+        output_tab_layout.setSpacing(0)
+
+        output_toolbar = QWidget()
+        output_toolbar.setStyleSheet("background: #0f0f1a; border-bottom: 1px solid #1a1a2e;")
+        out_tb_layout = QHBoxLayout(output_toolbar)
+        out_tb_layout.setContentsMargins(6, 4, 6, 4)
+        out_tb_layout.setSpacing(6)
+        save_results_btn = self._tb_btn("💾 Save Results…", "Save workflow results to JSON",
+                                        self._save_results)
+        save_results_btn.setFixedWidth(140)
+        out_tb_layout.addWidget(save_results_btn)
+        out_tb_layout.addStretch()
+        output_tab_layout.addWidget(output_toolbar)
 
         self._output_view = QTextEdit()
         self._output_view.setReadOnly(True)
         self._output_view.setPlaceholderText("Workflow execution output...")
-        self._bottom_tabs.addTab(self._output_view, "▶ Output")
+        output_tab_layout.addWidget(self._output_view)
+        self._bottom_tabs.addTab(output_tab, "▶ Output")
+
+        test_tab = QWidget()
+        test_tab_layout = QVBoxLayout(test_tab)
+        test_tab_layout.setContentsMargins(0, 0, 0, 0)
+        test_tab_layout.setSpacing(0)
+
+        test_toolbar = QWidget()
+        test_toolbar.setStyleSheet("background: #0f0f1a; border-bottom: 1px solid #1a1a2e;")
+        test_tb_layout = QHBoxLayout(test_toolbar)
+        test_tb_layout.setContentsMargins(6, 4, 6, 4)
+        test_tb_layout.setSpacing(6)
+        run_tests_btn = self._tb_btn("▶ Run Tests", "Generate and run pytest tests (F6)",
+                                     self._generate_and_run_tests)
+        run_tests_btn.setFixedWidth(120)
+        test_tb_layout.addWidget(run_tests_btn)
+        test_tb_layout.addStretch()
+        test_tab_layout.addWidget(test_toolbar)
 
         self._test_view = QTextEdit()
         self._test_view.setReadOnly(True)
-        self._test_view.setPlaceholderText("Generated pytest tests will appear here...")
-        self._bottom_tabs.addTab(self._test_view, "✓ Tests")
+        self._test_view.setPlaceholderText("Click '▶ Run Tests' to generate and run pytest tests...")
+        test_tab_layout.addWidget(self._test_view)
+        self._bottom_tabs.addTab(test_tab, "✓ Tests")
 
         v_split.addWidget(self._bottom_tabs)
         v_split.setSizes([600, 180])
@@ -430,8 +497,8 @@ class FlowStateMainWindow(QMainWindow):
         self._add_action(wm, "&Generate Code", "Ctrl+G", self.generate_code)
         self._add_action(wm, "&Run Workflow", "F5", self.run_workflow)
         wm.addSeparator()
-        self._add_action(wm, "Generate &Tests", "Ctrl+T", self.generate_tests)
-        self._add_action(wm, "Run &Tests", "F6", self.run_tests)
+        self._add_action(wm, "Generate &Tests", "Ctrl+T", self._generate_and_run_tests)
+        self._add_action(wm, "Run &Tests", "F6", self._generate_and_run_tests)
 
         vm = mb.addMenu("&View")
         self._add_action(vm, "Zoom &In", "Ctrl+=", lambda: self.canvas.scale(1.2, 1.2))
@@ -453,7 +520,7 @@ class FlowStateMainWindow(QMainWindow):
         for label, tip, cb in [
             ("⚡ Generate", "Generate Python code (Ctrl+G)", self.generate_code),
             ("▶ Run",       "Run workflow (F5)",             self.run_workflow),
-            ("✓ Tests",     "Generate + run tests (Ctrl+T)", self.generate_tests),
+            ("✓ Tests",     "Generate + run tests (F6)", self._generate_and_run_tests),
         ]:
             btn = tb.addWidget(self._tb_btn(label, tip, cb))
 
@@ -564,7 +631,7 @@ class FlowStateMainWindow(QMainWindow):
         scroll.setWidget(self._props_panel)
         dock.setWidget(scroll)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.setMinimumWidth(200)
+        dock.setMinimumWidth(220)
 
     # ── node operations ───────────────────────────────────────────────────────
 
@@ -603,7 +670,7 @@ class FlowStateMainWindow(QMainWindow):
         if not path:
             return
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             self.canvas.load_workflow_data(data)
             self.current_workflow_path = path
@@ -629,13 +696,66 @@ class FlowStateMainWindow(QMainWindow):
     def _write_workflow(self, path: str):
         try:
             data = self.canvas.get_workflow_data()
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             self._status(f"Saved: {path}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save: {e}")
 
     # ── code generation ───────────────────────────────────────────────────────
+
+    def _save_results(self):
+        if not self._last_results:
+            self._status("⚠ No results to save — run the workflow first (F5)")
+            return
+        default = os.path.splitext(os.path.basename(
+            self.current_workflow_path or "workflow"))[0] + "_results.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Results", default,
+            "JSON Files (*.json);;CSV Files (*.csv);;All Files (*)"
+        )
+        if not path:
+            return
+        try:
+            import json as _json
+            ext = os.path.splitext(path)[1].lower()
+            # Collect all list-of-dict data from results
+            all_rows = []
+            for v in self._last_results.values():
+                if isinstance(v, dict):
+                    for val in v.values():
+                        if isinstance(val, list) and val and isinstance(val[0], dict):
+                            all_rows = val
+                            break
+            if ext == ".csv" and all_rows:
+                import csv
+                with open(path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
+                    writer.writeheader()
+                    writer.writerows(all_rows)
+            else:
+                with open(path, "w", encoding="utf-8") as f:
+                    _json.dump(self._last_results, f, indent=2, default=str)
+            self._status(f"Results saved: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save results: {e}")
+
+    def _save_generated_code(self):
+        if not self.generated_code:
+            self._status("⚠ No generated code to save — run Generate first (Ctrl+G)")
+            return
+        default = os.path.splitext(os.path.basename(
+            self.current_workflow_path or "workflow"))[0] + ".py"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Generated Code", default, "Python Files (*.py);;All Files (*)"
+        )
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.generated_code)
+                self._status(f"Code saved: {path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save: {e}")
 
     def generate_code(self):
         wf = self.canvas.get_workflow_data()
@@ -676,13 +796,37 @@ class FlowStateMainWindow(QMainWindow):
 
         self._status("Running workflow…")
         self._bottom_tabs.setCurrentIndex(1)
+        # Point runner's cwd at the workflow file's directory so relative output paths work
+        if self.current_workflow_path:
+            self.workflow_runner._output_dir = os.path.dirname(
+                os.path.abspath(self.current_workflow_path))
+        else:
+            self.workflow_runner._output_dir = os.path.dirname(os.path.abspath(__file__))
         result = self.workflow_runner.execute_workflow_code(self.generated_code)
 
         if result["success"]:
+            # Parse results dict from stdout for Save Results button
+            import re as _re
+            _m = _re.search(r"Workflow results: (\{.+\})", result["stdout"], _re.DOTALL)
+            if _m:
+                try:
+                    self._last_results = ast.literal_eval(_m.group(1))
+                except Exception:
+                    self._last_results = None
+
+            stdout = result["stdout"] or "(no output)"
+            note = ""
+            if "Stub implementation" in (self.generated_code or ""):
+                note = (
+                    "\n⚠ NOTE: Some nodes used stub implementations.\n"
+                    "  Check the Generated Code tab — stubs return None.\n"
+                    + "─" * 50 + "\n"
+                )
             self._output_view.setPlainText(
                 "✓ WORKFLOW EXECUTED SUCCESSFULLY\n"
                 + "─" * 50 + "\n"
-                + (result["stdout"] or "(no output)")
+                + note
+                + stdout
             )
             self._status("✓ Workflow executed successfully")
         else:
@@ -692,6 +836,15 @@ class FlowStateMainWindow(QMainWindow):
                 + (result["stderr"] or result["stdout"] or "(no output)")
             )
             self._status("✗ Workflow execution failed")
+
+    def _generate_and_run_tests(self):
+        """Generate tests then immediately run them."""
+        if not self.generated_code:
+            self._status("⚠ Generate code first (Ctrl+G)")
+            return
+        self.generate_tests()
+        if self.generated_tests:
+            self.run_tests()
 
     def generate_tests(self):
         if not self.generated_code:
@@ -711,14 +864,14 @@ class FlowStateMainWindow(QMainWindow):
             self._status("⚠ Generate tests first (Ctrl+T)")
             return
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".py", delete=False, mode="w") as f:
+        with tempfile.NamedTemporaryFile(suffix=".py", delete=False, mode="w", encoding="utf-8") as f:
             f.write(self.generated_tests)
             tp = f.name
         result = run_pytest_tests(self.generated_tests, tp)
         os.unlink(tp)
 
-        out = ("✓ TESTS PASSED\n" if result["success"] else "✗ TESTS FAILED\n")
-        out += "─" * 50 + "\n" + (result["stdout"] or result["stderr"] or "(no output)")
+        out = ("TESTS PASSED\n" if result["success"] else "TESTS FAILED\n")
+        out += "-" * 50 + "\n" + (result["stdout"] or result["stderr"] or "(no output)")
         self._test_view.setPlainText(out)
         self._bottom_tabs.setCurrentIndex(2)
         self._status("✓ Tests passed" if result["success"] else "✗ Tests failed")
