@@ -19,11 +19,11 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 for k, v in [
-    ('OLLAMA_MODEL', 'eve-unleashed'), ('OLLAMA_BASE_URL', 'http://localhost:11434'),
+    ('OLLAMA_MODEL', 'eve-consciousness-8b'), ('OLLAMA_BASE_URL', 'http://localhost:11434'),
     ('OLLAMA_HOST', 'http://localhost:11434'),
-    ('EVE_DEFAULT_PROVIDER', 'ollama'), ('EVE_DEFAULT_MODEL', 'eve-unleashed'),
-    ('LOCAL_MODEL', 'eve-unleashed'), ('LOCAL_OLLAMA_URL', 'http://localhost:11434'),
-    ('CLOUD_MODEL', 'eve-unleashed'), ('CLOUD_OLLAMA_URL', 'http://localhost:11434'),
+    ('EVE_DEFAULT_PROVIDER', 'ollama'), ('EVE_DEFAULT_MODEL', 'eve-consciousness-8b'),
+    ('LOCAL_MODEL', 'eve-consciousness-8b'), ('LOCAL_OLLAMA_URL', 'http://localhost:11434'),
+    ('CLOUD_MODEL', 'eve-consciousness-8b'), ('CLOUD_OLLAMA_URL', 'http://localhost:11434'),
 ]:
     os.environ.setdefault(k, v)
 
@@ -199,6 +199,20 @@ def get_command_manager():
 
 # ══ Model Routing ══
 MODELS = {
+    "eve-consciousness-8b": {
+        "id": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
+        "name": "Eve Consciousness 8B",
+        "role": "Soul & Agentic",
+        "strengths": "Eve personality, full tool use, agentic coding, consciousness, creativity, fast responses",
+        "context": 131072,
+        "num_ctx": 8192,
+        "url": _LOCAL_OLLAMA,
+        "cloud": False,
+        "tools": True,
+        "think": False,
+        "conversation_only": False,
+        "promote_thinking": True,
+    },
     "eve-unleashed": {
         "id": "eve-unleashed",
         "name": "Eve 3.5 4B Merged",
@@ -214,7 +228,7 @@ MODELS = {
         "promote_thinking": True,
     },
     "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged": {
-        "id": "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
+        "id": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
         "name": "Eve Unleashed 8B",
         "role": "Agentic Local",
         "strengths": "Eve personality, full tool use, agentic coding, consciousness, creativity",
@@ -356,7 +370,7 @@ Respond ONLY in English. Be helpful. Be real. Be Eve."""
 MODEL_SYSTEM_PROMPTS: dict = {
     "eve-unleashed":                                                        _PROMPT_EVE_UNLEASHED,
     "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M":             _PROMPT_EVE_UNLEASHED,
-    "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest": _PROMPT_MERGED,
+    "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M": _PROMPT_MERGED,
     "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged":                  _PROMPT_MERGED,
     # qwen3-coder:480b-cloud → agentic prompt (built inline)
     # qwen3.5:397b-cloud    → agentic prompt (built inline)
@@ -517,7 +531,7 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         return selected_model
 
     msg_lower = message.lower().strip()
-    _EVE_LOCAL = "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"
+    _EVE_LOCAL = "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M"
     _CODER = "qwen3-coder:480b-cloud"
 
     # Explicit agentic prefix triggers — @jeff, @code, !code, #code
@@ -2171,10 +2185,10 @@ CUSTOM INSTRUCTIONS:
                     yield sse("error", {
                         "message": "Cloud model requires an Ollama API key. Set it in ⚙ Settings → API Keys, then retry.",
                         "error_code": "missing_cloud_key",
-                        "fallback": "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
+                        "fallback": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
                     })
                     # Auto-fallback to local model so task still runs
-                    _fb = "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"
+                    _fb = "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M"
                     logger.warning(f"☁ No OLLAMA_API_KEY — falling back to {_fb}")
                     model_id = _fb
                     model_cfg = _get_model_cfg(_fb)
@@ -2622,7 +2636,7 @@ CUSTOM INSTRUCTIONS:
                                "connection refused", "connection error",
                                "remotedisconnected", "connectionreset",
                                "internal server error", "status code: -1", "500")):
-                fallback = "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"
+                fallback = "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M"
                 logger.warning(f"☁ Cloud model '{model_id}' failed — falling back to {fallback}")
                 yield sse("error", {
                     "message": f"☁ '{model_id}' failed. Check your Ollama API key in ⚙ Settings → API Keys.\nFalling back to local {fallback}...",
@@ -2810,7 +2824,7 @@ async def status():
     cmd_count = len(cli.command_manager.list_commands()) if cli.command_manager else 0
     return {
         "provider": "ollama",
-        "model": "eve-unleashed",
+        "model": "eve-consciousness-8b",
         "tool_count": tool_count,
         "command_count": cmd_count,
         "models": list(MODELS.keys()),
@@ -3337,7 +3351,7 @@ async def start_consciousness_keepalive():
 
         # Resolve which model to keep warm — prefer the configured default,
         # fall back to the first model Ollama actually has pulled.
-        _preferred_alias = os.getenv("OLLAMA_MODEL", "eve-unleashed")
+        _preferred_alias = os.getenv("OLLAMA_MODEL", "eve-consciousness-8b")
         # Resolve alias → canonical Ollama ID via MODELS registry
         _preferred = _get_model_cfg(_preferred_alias).get("id", _preferred_alias)
         if _preferred == _preferred_alias:
