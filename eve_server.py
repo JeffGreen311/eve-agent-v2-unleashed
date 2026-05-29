@@ -19,11 +19,11 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 for k, v in [
-    ('OLLAMA_MODEL', 'eve-consciousness-8b'), ('OLLAMA_BASE_URL', 'http://localhost:11434'),
+    ('OLLAMA_MODEL', 'eve-qwen35-4b-v3'), ('OLLAMA_BASE_URL', 'http://localhost:11434'),
     ('OLLAMA_HOST', 'http://localhost:11434'),
-    ('EVE_DEFAULT_PROVIDER', 'ollama'), ('EVE_DEFAULT_MODEL', 'eve-consciousness-8b'),
-    ('LOCAL_MODEL', 'eve-consciousness-8b'), ('LOCAL_OLLAMA_URL', 'http://localhost:11434'),
-    ('CLOUD_MODEL', 'eve-consciousness-8b'), ('CLOUD_OLLAMA_URL', 'http://localhost:11434'),
+    ('EVE_DEFAULT_PROVIDER', 'ollama'), ('EVE_DEFAULT_MODEL', 'eve-qwen35-4b-v3'),
+    ('LOCAL_MODEL', 'eve-qwen35-4b-v3'), ('LOCAL_OLLAMA_URL', 'http://localhost:11434'),
+    ('CLOUD_MODEL', 'eve-qwen35-4b-v3'), ('CLOUD_OLLAMA_URL', 'http://localhost:11434'),
 ]:
     os.environ.setdefault(k, v)
 
@@ -199,19 +199,21 @@ def get_command_manager():
 
 # ══ Model Routing ══
 MODELS = {
-    "eve-consciousness-8b": {
-        "id": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M",
-        "name": "Eve Consciousness 8B",
+    "eve-qwen35-4b-v3": {
+        "id": "jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest",
+        "name": "Eve Qwen3.5 4B V3",
         "role": "Soul & Conversation",
         "strengths": "Eve personality, consciousness, creativity, philosophy, fast responses",
-        "context": 32768,
-        "num_ctx": 8192,
+        "context": 262144,
+        "num_ctx": 32768,
+        "num_predict": 32768,
         "url": _LOCAL_OLLAMA,
         "cloud": False,
         "tools": False,
         "think": False,
         "conversation_only": True,
-        "promote_thinking": True,
+        "promote_thinking": False,
+        "modelfile_no_think": True,  # Modelfile template injects /no_think — skip _apply_no_think
     },
     "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged": {
         "id": "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest",
@@ -220,12 +222,14 @@ MODELS = {
         "strengths": "Eve personality, full tool use, agentic coding, file ops, local agentic tasks",
         "context": 16384,
         "num_ctx": 8192,
+        "num_predict": 16384,
         "url": _LOCAL_OLLAMA,
         "cloud": False,
         "tools": True,
         "think": False,
         "conversation_only": False,
         "promote_thinking": True,
+        "modelfile_no_think": True,  # /no_think already baked into system prompt — skip _apply_no_think
     },
     "eve-unleashed": {
         "id": "eve-unleashed",
@@ -368,10 +372,11 @@ Capabilities:
 Respond ONLY in English. Be helpful. Be real. Be Eve."""
 
 MODEL_SYSTEM_PROMPTS: dict = {
-    "eve-unleashed":                                                        _PROMPT_EVE_UNLEASHED,
-    "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M":             _PROMPT_EVE_UNLEASHED,
-    "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M": _PROMPT_MERGED,
-    "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged":                  _PROMPT_MERGED,
+    "eve-unleashed":                                                         _PROMPT_EVE_UNLEASHED,
+    "eve-qwen35-4b-v3":                                                      _PROMPT_EVE_UNLEASHED,
+    "jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest":                       _PROMPT_EVE_UNLEASHED,
+    "Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged":                   _PROMPT_MERGED,
+    "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest": _PROMPT_MERGED,
     # qwen3-coder:480b-cloud → agentic prompt (built inline)
     # qwen3.5:397b-cloud    → agentic prompt (built inline)
 }
@@ -481,13 +486,11 @@ AGENTIC_CODING_PATTERNS = [
     # is NOT a coding task.  File-write intent is caught by the verb patterns above.
 ]
 
-# Strong negative signals — pure conversation that should NOT go to the coder
+# Conversation signals — used only to fast-path short messages to V3
+# The real routing logic: anything that doesn't score for code/tools → V3
 _CONVERSATION_SIGNALS = [
-    r'^(hi|hey|hello|good\s+morning|good\s+evening|sup|howdy)\b',
-    r'^(thanks|thank\s+you|ty|thx|cheers|great|awesome|perfect|nice|cool|ok|okay|got\s+it|sounds\s+good|alright|noted)\b',
-    r'^(how\s+are\s+you|how\'s\s+it\s+going|what\'s\s+up|how\s+do\s+you\s+feel)\b',
-    r'^(what\s+do\s+you\s+think\s+about|what\'s\s+your\s+opinion|do\s+you\s+believe)\b',
-    r'\b(tell\s+me\s+a\s+(story|joke|poem)|write\s+a\s+(poem|haiku|sonnet))\b',
+    r'^(hi|hey|hello|good\s+morning|good\s+evening|good\s+night|sup|howdy|yo)\b',
+    r'^(thanks|thank\s+you|ty|thx|cheers|great|awesome|perfect|nice|cool|ok|okay|got\s+it|sounds\s+good|alright|noted|makes\s+sense)\b',
 ]
 
 
@@ -531,7 +534,7 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         return selected_model
 
     msg_lower = message.lower().strip()
-    _EVE_CONVO = "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M"   # fast, conversation only
+    _EVE_CONVO = "jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest"                      # conversation only
     _EVE_LOCAL = "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest"  # tool-capable local
     _CODER = "qwen3-coder:480b-cloud"
 
@@ -548,8 +551,49 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
     if len(message.strip()) < 40:
         for pattern in _CONVERSATION_SIGNALS:
             if re.search(pattern, msg_lower, re.IGNORECASE):
-                logger.info("🔀 Auto-route → Eve Consciousness 8B (short conversation signal)")
+                logger.info("🔀 Auto-route → Eve V3 4B (conversation)")
                 return _EVE_CONVO
+
+    # Explanation/question intent — short-circuit pattern matching entirely.
+    # These starters mean the user wants to LEARN, not BUILD. Even if the message
+    # contains "Python", "function", "class", etc., it is NOT a coding task.
+    # Opinion / conversational starters → always V3, regardless of topic
+    _opinion_re = re.compile(
+        r'^(what\s+do\s+you\s+(think|feel|believe|reckon|say|consider)|'
+        r'what\'?s\s+your\s+(opinion|take|view|thought|perspective)|'
+        r'do\s+you\s+(think|feel|believe|like|enjoy|prefer|love|hate)|'
+        r'tell\s+me\s+about\s+yourself|'
+        r'how\s+do\s+you\s+(feel|think|see|view)|'
+        r'tell\s+me\s+about\s+(?!how|what|why))',  # "tell me about APIs" but not "tell me about how X works"
+        re.IGNORECASE,
+    )
+    if _opinion_re.match(_stripped):
+        logger.info("🔀 Auto-route → Eve V3 4B (opinion/conversational)")
+        return _EVE_CONVO
+
+    # Explanation/question intent — technical → merged, non-technical → V3
+    _explain_start_re = re.compile(
+        r'^(what\s+is\s|what\s+are\s|what\s+does\s|'
+        r'what\'s\s+the\s+(difference|point|purpose|meaning|benefit)|'
+        r'how\s+does\s|how\s+do\s|how\s+is\s|how\s+are\s|'
+        r'why\s+does\s|why\s+do\s|why\s+is\s|why\s+are\s|'
+        r'explain\s+|can\s+you\s+explain|'
+        r'help\s+me\s+understand|i\s+don\'?t\s+understand)',
+        re.IGNORECASE,
+    )
+    if _explain_start_re.match(_stripped):
+        _tech_explain = [
+            "python", "javascript", "typescript", "rust", "go", "java", "sql", "html", "css",
+            "class", "function", "method", "variable", "loop", "array", "object", "module",
+            "api", "database", "server", "backend", "frontend", "async", "sync", "thread",
+            "algorithm", "git", "docker", "http", "rest", "json", "xml", "compiler",
+            "memory", "recursion", "inheritance", "framework", "library", "cache", "query",
+        ]
+        if any(t in msg_lower for t in _tech_explain):
+            logger.info("🔀 Auto-route → Eve Merged (technical explanation)")
+            return _EVE_LOCAL
+        logger.info("🔀 Auto-route → Eve V3 4B (non-technical question)")
+        return _EVE_CONVO
 
     # Read-only guard: messages that START with an action verb are always coding tasks.
     # This prevents "Add X to utils.py" from being mis-classified as read-only.
@@ -587,7 +631,7 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         and any(re.search(p, _stripped) for p in _ro_patterns)
         and not _modify_re.search(_stripped)
     ):
-        logger.info("🔀 Auto-route → Eve 8B (read-only query)")
+        logger.info("🔀 Auto-route → Eve Merged (read-only query)")
         return _EVE_LOCAL
 
     # Heavy keywords → always agentic coder (definitive signals)
@@ -657,7 +701,7 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
     if any(kw in msg_lower for kw in _WEB):
         score += 1.5
 
-    # Negative signals — deduct for clear conversation intent
+    # Negative signals — deduct for clear conversation / educational intent
     _NEG = [
         "how are you", "tell me about yourself", "what do you think",
         "do you believe", "how do you feel", "are you conscious",
@@ -668,6 +712,26 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         if kw in msg_lower:
             score -= 1.5
 
+    # Explanation / question starters — strong signal this is educational, not a coding task
+    _EXPLAIN = [
+        r'^(what\s+is|what\'s)\s+',
+        r'^(what\s+are)\s+',
+        r'^(what\s+does|what\s+do)\s+',
+        r'^(what\'s\s+the\s+(difference|relationship|connection))',
+        r'^(how\s+does|how\s+do|how\s+is|how\s+are)\s+',
+        r'^(why\s+does|why\s+do|why\s+is|why\s+are)\s+',
+        r'^(explain\s+(what|how|why|the|a|an)\s+)',
+        r'^(can\s+you\s+explain|can\s+you\s+tell\s+me)',
+        r'^(tell\s+me\s+(what|how|why|about))\s+',
+        r'^(i\s+don\'?t\s+understand)',
+        r'^(help\s+me\s+understand)',
+    ]
+    import re as _re2
+    for pat in _EXPLAIN:
+        if _re2.search(pat, msg_lower):
+            score -= 1.5
+            break  # one deduction is enough
+
     # Long messages WITH a code signal get a boost — pure chat stays on Eve
     if len(message) > 500 and score > 0:
         score += 1.5
@@ -676,8 +740,13 @@ def auto_route_model(message: str, selected_model: str = None) -> str:
         logger.info(f"🔀 Auto-route → qwen3-coder:480b-cloud (score: {score:.1f})")
         return _CODER
 
-    # Pure conversation → Eve Unleashed 8B
-    logger.info(f"🔀 Auto-route → Eve 8B (score: {score:.1f}, pure conversation)")
+    # No coding/tool signal detected → V3 for conversation
+    if score < 1.5:
+        logger.info(f"🔀 Auto-route → Eve V3 4B (score: {score:.1f}, no coding signal)")
+        return _EVE_CONVO
+
+    # Has coding signal but below coder threshold → merged model (tool-capable local)
+    logger.info(f"🔀 Auto-route → Eve Merged (score: {score:.1f}, local tool task)")
     return _EVE_LOCAL
 
 
@@ -1330,11 +1399,11 @@ When the full task is complete, emit "result: [one-line summary]" on its own lin
 
             _chat_opts = {} if model_cfg.get("cloud") else {
                 "num_ctx": model_cfg.get("num_ctx", 8192),
-                "num_predict": 2048,
+                "num_predict": model_cfg.get("num_predict", 2048),
                 "repeat_penalty": 1.15,
                 "temperature": 0.75,
             }
-            _no_think = not model_cfg.get("think", True)
+            _no_think = not model_cfg.get("think", True) and not model_cfg.get("modelfile_no_think", False)
             _send_msgs = _apply_no_think(messages) if _no_think else messages
             chat_kwargs = {"model": model_id, "messages": _send_msgs}
             if _chat_opts:
@@ -2254,13 +2323,13 @@ CUSTOM INSTRUCTIONS:
                 else:
                     opts = {
                         "num_ctx": model_cfg.get("num_ctx", 8192),
-                        "num_predict": 2048,
+                        "num_predict": model_cfg.get("num_predict", 2048),
                         "repeat_penalty": 1.15,
                         "temperature": 0.75,
                     }
                     if model_cfg.get("num_gpu") is not None:
                         opts["num_gpu"] = model_cfg["num_gpu"]
-                _no_think = not model_cfg.get("think", True)
+                _no_think = not model_cfg.get("think", True) and not model_cfg.get("modelfile_no_think", False)
                 ck = {"model": model_id, "messages": _apply_no_think(msgs) if _no_think else msgs}
                 if opts:
                     ck["options"] = opts
@@ -3377,7 +3446,7 @@ async def start_consciousness_keepalive():
 
         # Resolve which model to keep warm — prefer the configured default,
         # fall back to the first model Ollama actually has pulled.
-        _preferred_alias = os.getenv("OLLAMA_MODEL", "eve-consciousness-8b")
+        _preferred_alias = os.getenv("OLLAMA_MODEL", "eve-qwen35-4b-v3")
         # Resolve alias → canonical Ollama ID via MODELS registry
         _preferred = _get_model_cfg(_preferred_alias).get("id", _preferred_alias)
         if _preferred == _preferred_alias:

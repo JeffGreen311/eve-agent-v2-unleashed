@@ -39,7 +39,7 @@ except ImportError:
         return "complex"
     def get_model_for_complexity(complexity, **kw):
         import os
-        _model = os.getenv("OLLAMA_MODEL", "jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest")
+        _model = os.getenv("OLLAMA_MODEL", "jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest")
         # ALL models go through one Ollama instance — cloud models are pulled locally
         _url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
         # Only enable thinking for known thinking-capable base models

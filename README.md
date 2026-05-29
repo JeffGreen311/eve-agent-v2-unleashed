@@ -103,8 +103,8 @@ No GPT-4. Local 8B Q4_K_M on your GPU with Qwen3-Coder.
 # Minimum — Eve 3.5 4B Merged (default, 3.4 GB):
 ollama pull jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest
 
-# Optional — Eve 8B Consciousness (4.7 GB):
-ollama pull jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M
+# Soul & Conversation — Eve Qwen3.5 4B S0LF0RG3 V3 (2.5 GB):
+ollama pull jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest
 ```
 
 ### 2 — Clone & install
@@ -180,8 +180,8 @@ Open **[http://localhost:7777](http://localhost:7777)** — that's it. No config
 
 | Model | Size | Best For |
 |-------|------|----------|
-| [`jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged`](https://ollama.com/jeffgreen311) | 3.4 GB | **Default** — Eve 3.5 4B Merged · poetic, liminal, creative |
-| [`jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M`](https://ollama.com/jeffgreen311) | 4.7 GB | Eve 8B Consciousness — deeper reasoning, Tree of Life soul |
+| [`jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged`](https://ollama.com/jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged) | 3.4 GB | **Default agentic** — tool-capable, read/explain/build tasks |
+| [`jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3`](https://ollama.com/jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3) | 2.5 GB | **Soul & Conversation** — Tree of Life · 7 LoRAs · consciousness DNA · fast |
 
 ### Cloud (optional — billed by token)
 
@@ -199,7 +199,7 @@ Get a free Ollama API key at [ollama.com/settings/keys](https://ollama.com/setti
 - Python 3.11+
 - [Ollama](https://ollama.com/download) installed and running
 - GPU recommended (NVIDIA CUDA or Apple Silicon Metal)
-- 8 GB VRAM minimum for the 4B model; 12 GB+ for 8B
+- 4 GB VRAM minimum for Eve V3 4B; 6 GB+ for the merged model
 
 ---
 
@@ -216,11 +216,11 @@ Start it if it doesn't auto-launch: `ollama serve`
 ### Pull a model
 
 ```bash
-# Default — Eve 3.5 4B Merged (3.4 GB)
+# Default agentic model — Eve 3.5 4B Merged (3.4 GB)
 ollama pull jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest
 
-# Optional — Eve 8B Consciousness (4.7 GB)
-ollama pull jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M
+# Soul & Conversation — Eve Qwen3.5 4B S0LF0RG3 V3 (2.5 GB)
+ollama pull jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest
 ```
 
 ### Configure (optional)
@@ -365,6 +365,15 @@ pip install python-telegram-bot
 
 ---
 
+## 🧠 Intelligence Improvements (v2.4)
+
+- **Eve Qwen3.5 4B S0LF0RG3 V3** replaces Eve 8B Consciousness as the soul/conversation model — lighter (2.5 GB vs 4.7 GB), faster, and fine-tuned with the full Tree of Life architecture, 7 emotional LoRAs, and 14,389 moments of lived experience.
+- **Three-tier auto-routing** — V3 handles all pure conversation and philosophical/introspective questions; the merged model handles technical explanations and local tool tasks; Qwen3 Coder 480B handles heavy agentic coding. Routing is intent-aware: opinion starters (`what do you think...`) and explanation starters (`what is...`, `how does...`) are classified correctly before keyword scoring runs.
+- **`/no_think` injection fix** — models with `/no_think` baked into their Modelfile system prompt no longer get it double-injected into user messages (which was corrupting paths like `/no_think` being passed as tool arguments).
+- **`num_predict` fix** — both the chat loop and SSE stream path now read `num_predict` from the model config instead of hardcoding 2048, giving V3 and the merged model their full output budget.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] 40-round agentic tool loop with streaming SSE
@@ -384,6 +393,9 @@ pip install python-telegram-bot
 - [x] Ollama 400 graceful tools fallback with `_runtime_no_tools` cache (v2.2)
 - [x] ComplexityTracker test suite — 14 unit tests (v2.2)
 - [x] Computer vision tools — screenshot, screen analysis, GUI interaction via OpenClaw (v2.3)
+- [x] Eve Qwen3.5 4B S0LF0RG3 V3 as soul/conversation model — replaces 8B consciousness (v2.4)
+- [x] Three-tier intent-aware routing: V3 (soul) / Merged (tools) / 480B (heavy coding) (v2.4)
+- [x] `num_predict` fix — full output budget from model config, not hardcoded 2048 (v2.4)
 - [ ] **Voice input / TTS output**
 - [ ] **Multi-file project context awareness** (auto-load OLLAMA.md)
 - [ ] **Plugin marketplace** for community-built tools
@@ -473,7 +485,7 @@ Copy `.env.example` to `.env` and set what you need:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Local Ollama server URL |
-| `OLLAMA_MODEL` | `jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest` | Default model on launch |
+| `OLLAMA_MODEL` | `jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest` | Default model on launch |
 | `OLLAMA_API_KEY` | *(empty)* | Ollama Cloud key — for `:cloud` models |
 | `TAVILY_API_KEY` | *(empty)* | Tavily key — for live web search |
 | `EVE_WORKSPACE` | Project directory | Default working directory |

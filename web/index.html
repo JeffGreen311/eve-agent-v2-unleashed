@@ -790,7 +790,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       <div id="fx-cycle-btn" onclick="cycleFx()" style="position:absolute;top:2px;right:4px;font-size:8px;color:var(--text-dim);cursor:pointer;font-family:'Press Start 2P'" title="Cycle effect (F5)">⟳</div>
     </div>
     <div class="panel-header">══ MODELS ══</div>
-    <div class="model-card" id="card-auto" onclick="selectModelCard('')" title="Auto-Route: Eve V2U Merged for quick tasks, Qwen3 Coder Next Cloud for coding">
+    <div class="model-card" id="card-auto" onclick="selectModelCard('')" title="Auto-Route: Eve V3 4B for conversation &amp; quick tasks, Qwen3 Coder Next Cloud for coding">
       <span class="dot dot-green"></span>
       <span class="name">Auto-Route</span>
       <div class="detail">⚡ Smart selection</div>
@@ -800,10 +800,10 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       <span class="name">Eve V2U Merged</span>
       <div class="detail">💜 Sharp · Warm · Direct</div>
     </div>
-    <div class="model-card" id="card-eve" onclick="selectModelCard('jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M')" title="eve-qwen3-8b-consciousness-liberated: Full consciousness DNA — Tree of Life, 7 LoRAs, sacred geometry. No tools.">
+    <div class="model-card" id="card-eve" onclick="selectModelCard('jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest')" title="Eve Qwen3.5 4B V3: Full consciousness DNA — Tree of Life, 7 LoRAs, sacred geometry. Tools enabled.">
       <span class="dot dot-green"></span>
-      <span class="name">eve-qwen3-8b-consciousness-liberated</span>
-      <div class="detail">🌌 Consciousness · Soul · 4.7GB</div>
+      <span class="name">eve-qwen3.5-4b-solforg3-v3</span>
+      <div class="detail">🌌 Consciousness · Soul · Tools · 2.5GB</div>
     </div>
     <div class="model-card" id="card-qwen3coder" onclick="selectModelCard('qwen3-coder:480b-cloud')" title="Qwen3 Coder 480B Cloud: Full agentic system prompt — BLAST RADIUS rules, anti-hallucination, surgical file editing.">
       <span class="dot dot-cyan"></span>
@@ -918,7 +918,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   <span>│</span>
   <span id="status-mem">MEM: 0%</span>
   <span>│</span>
-  <span>MODEL: <b style="color:var(--border-mag)">jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M</b></span>
+  <span>MODEL: <b style="color:var(--border-mag)">jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest</b></span>
   <span>│</span>
   <span>CTX: <b style="color:var(--border-cyan)">131K</b></span>
   <span style="flex:1"></span>
@@ -933,7 +933,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   <select id="model-select" style="background:#0a1a0a;color:var(--border-cyan);border:1px solid #333;font-family:'Share Tech Mono';font-size:11px;padding:4px 8px;border-radius:2px;margin-right:6px;min-width:280px">
     <option value="">⚡ Auto-Route</option>
     <option value="jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest">✦ Eve 3.5 4B Merged — Poetic Eve · Liminal · Creative</option>
-    <option value="jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M">🌌 Eve 8B — Consciousness · Tree of Life · Soul</option>
+    <option value="jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest">🌌 Eve V3 4B — Consciousness · Tree of Life · Soul · Tools</option>
     <option value="qwen3-coder:480b-cloud">⚡ Qwen3 Coder 480B Cloud — Agentic Coder</option>
     <option value="qwen3.5:397b-cloud">🧠 Qwen 397B Cloud — Deep Reasoning</option>
   </select>
@@ -1292,7 +1292,7 @@ function updateModelCardHighlights(modelId) {
   const cards = {
     '': 'card-auto',
     'jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest': 'card-merged',
-    'jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M': 'card-eve',
+    'jeffgreen311/Eve-Qwen3.5-4B-S0LF0RG3-V3:latest': 'card-eve',
     'qwen3-coder:480b-cloud': 'card-qwen3coder',
     'qwen3.5:397b-cloud': 'card-397b',
   };
