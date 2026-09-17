@@ -152,6 +152,10 @@ class EveAgent:
             personality_engine=self.personality,
             user_settings=self.user_settings,
         )
+        # Cache one provider instance per backend so switching models at
+        # runtime (set_model) doesn't tear down connections/state.
+        self._ollama_provider: Optional[LLMProvider] = None
+        self._anthropic_provider: Optional[LLMProvider] = None
         self._init_provider()
         self._init_coder_provider()
 
@@ -390,14 +394,17 @@ class EveAgent:
             )
 
         # ── Hybrid routing: simple → local 4B, complex → cloud 397B ──
+        # Only applies to the shared Ollama backend — a model explicitly
+        # switched to Anthropic via set_model() (e.g. Claude Sonnet 5) stays
+        # on Anthropic; the complexity router has no opinion on Claude models.
         complexity = classify_complexity(message)
         route = get_model_for_complexity(complexity)
         _prev_model = getattr(self.provider, 'model', None)
         _prev_url = getattr(self.provider, 'base_url', None)
-        if hasattr(self.provider, 'switch_model'):
+        if self.provider is not None and self.provider.name == "ollama" and hasattr(self.provider, 'switch_model'):
             self.provider.switch_model(route["model"], route["base_url"])
             logger.info(f"Routing [{complexity}] → {route['model']} @ {route['base_url']}")
-        yield {"type": "routing", "complexity": complexity, "model": route["model"]}
+        yield {"type": "routing", "complexity": complexity, "model": getattr(self.provider, 'model', route['model'])}
 
         # Eve Unleashed: ALWAYS enable tools — she's an agent, not a chatbot
         needs_tools = not has_vision
@@ -499,7 +506,7 @@ class EveAgent:
         emotional = self.emotional_transcoder.transcode()
 
         # Restore provider to default cloud model after routing
-        if hasattr(self.provider, 'switch_model') and _prev_model:
+        if self.provider is not None and self.provider.name == "ollama" and _prev_model:
             self.provider.switch_model(_prev_model, _prev_url or "")
 
         yield {"type": "done", "content": response_text, "emotional_state": emotional}
@@ -1002,6 +1009,7 @@ class EveAgent:
                 base_url=self.settings.ollama_base_url,
                 api_key=self.settings.ollama_api_key,
             )
+            self._ollama_provider = self.provider
         elif provider_name == "anthropic":
             from eve.brain.anthropic_provider import AnthropicProvider
             # Prefer Coding Plan API over direct Anthropic key
@@ -1016,12 +1024,61 @@ class EveAgent:
                 api_key=_api_key,
                 base_url=_base_url,
             )
+            self._anthropic_provider = self.provider
         elif provider_name == "openai":
             from eve.brain.openai_provider import OpenAIProvider
             self.provider = OpenAIProvider(
                 model=self.settings.default_model or "gpt-4o",
                 api_key=self.settings.openai_api_key,
             )
+
+    # Model ids routed to the real Anthropic Messages API via set_model().
+    _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
+
+    def set_model(self, model_id: str) -> bool:
+        """Switch the active LLM provider/model for this agent at runtime.
+
+        Anthropic model ids (e.g. "claude-sonnet-5") are routed to a real
+        AnthropicProvider talking to the Anthropic Messages API directly —
+        keeping a cached instance so state/connections persist across
+        switches. Everything else goes through the shared Ollama instance,
+        same as before. Returns True if the switch took effect.
+        """
+        if not model_id:
+            return False
+
+        if model_id.startswith(self._ANTHROPIC_MODEL_PREFIXES):
+            if not (self.settings.coding_plan_api_key or self.settings.anthropic_api_key):
+                logger.warning(
+                    f"Model '{model_id}' needs ANTHROPIC_API_KEY (or CODING_PLAN_API_KEY) set — "
+                    f"staying on {self.provider.name if self.provider else 'no'} provider"
+                )
+                return False
+            if self._anthropic_provider is None:
+                from eve.brain.anthropic_provider import AnthropicProvider
+                if self.settings.coding_plan_api_key:
+                    _api_key, _base_url = self.settings.coding_plan_api_key, self.settings.coding_plan_base_url
+                else:
+                    _api_key, _base_url = self.settings.anthropic_api_key, ""
+                self._anthropic_provider = AnthropicProvider(model=model_id, api_key=_api_key, base_url=_base_url)
+            else:
+                self._anthropic_provider.switch_model(model_id)
+            self.provider = self._anthropic_provider
+            logger.info(f"Switched provider → anthropic ({model_id})")
+            return True
+
+        # Non-Anthropic model id — route back through the shared Ollama instance.
+        if self._ollama_provider is None:
+            from eve.brain.ollama_provider import OllamaProvider
+            self._ollama_provider = OllamaProvider(
+                model=model_id,
+                base_url=self.settings.ollama_base_url,
+                api_key=self.settings.ollama_api_key,
+            )
+        else:
+            self._ollama_provider.switch_model(model_id, self.settings.ollama_base_url)
+        self.provider = self._ollama_provider
+        return True
 
     def _init_coder_provider(self):
         """Initialize the code-optimized fallback provider."""

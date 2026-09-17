@@ -1027,12 +1027,15 @@ def create_app():
 
         agent = get_agent()
 
-        # Switch model if requested by frontend selector — persist via env var
-        # so the complexity router also picks it up (it reads OLLAMA_MODEL)
-        if req.model and hasattr(agent, "provider") and agent.provider:
+        # Switch model if requested by frontend selector. Anthropic model ids
+        # (e.g. "claude-sonnet-5") route to the real Anthropic API via a
+        # dedicated provider; everything else keeps going through the shared
+        # Ollama instance. See EveAgent.set_model().
+        if req.model and hasattr(agent, "set_model"):
+            agent.set_model(req.model)
+        elif req.model and hasattr(agent, "provider") and agent.provider:
             import os as _os
             _os.environ["OLLAMA_MODEL"] = req.model
-            # ALL models go through one Ollama instance
             _base = _os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
             if hasattr(agent.provider, "switch_model"):
                 agent.provider.switch_model(req.model, base_url=_base)
@@ -3039,6 +3042,7 @@ def create_app():
                 {"id": "qwen3.5:4b",                   "label": "Qwen3 4B Local",       "provider": "ollama",    "description": "Local · fast · reliable · 4B"},
                 {"id": "qwen3-coder:30b",            "label": "Coder 30B Local",      "provider": "ollama",    "description": "Local · tools · 30B · code"},
                 # Anthropic Claude — via Coding Plan or direct key
+                {"id": "claude-sonnet-5",            "label": "Sonnet 5 (Eve)", "provider": "anthropic", "description": "Claude Sonnet 5 · Eve persona · balanced"},
                 {"id": "claude-sonnet-4-6",          "label": "Sonnet 4.6",     "provider": "anthropic", "description": "Claude · balanced · fast"},
                 {"id": "claude-opus-4-6",            "label": "Opus 4.6",       "provider": "anthropic", "description": "Claude · most capable"},
                 {"id": "claude-haiku-4-5-20251001",  "label": "Haiku 4.5",      "provider": "anthropic", "description": "Claude · ultra-fast"},
