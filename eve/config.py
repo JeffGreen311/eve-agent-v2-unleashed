@@ -19,6 +19,8 @@ class Settings(BaseSettings):
         alias="CODING_PLAN_BASE_URL",
     )
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    comfy_cloud_api_key: str = Field(default="", alias="COMFY_CLOUD_API_KEY")
+    comfy_cloud_base_url: str = Field(default="https://cloud.comfy.org", alias="COMFY_CLOUD_BASE_URL")
     ollama_base_url: str = Field(default="http://ollama:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="jeffgreen311/Eve-V2-Unleashed-Qwen3.5-8B-Liberated-4K-4B-Merged:latest", alias="OLLAMA_MODEL")
     ollama_api_key: str = Field(default="", alias="OLLAMA_API_KEY")

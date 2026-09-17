@@ -156,6 +156,7 @@ class EveAgent:
         # runtime (set_model) doesn't tear down connections/state.
         self._ollama_provider: Optional[LLMProvider] = None
         self._anthropic_provider: Optional[LLMProvider] = None
+        self._comfy_claude_provider: Optional[LLMProvider] = None
         self._init_provider()
         self._init_coder_provider()
 
@@ -302,7 +303,9 @@ class EveAgent:
 
         # 5. Call LLM — use tools when message implies an action or capability question
         # Eve Unleashed: ALWAYS enable tools — she's an agent, not a chatbot
-        needs_tools = not has_vision
+        # (unless the active provider has no native tool-calling loop, e.g. the
+        # single-shot Comfy Cloud Claude graph)
+        needs_tools = not has_vision and getattr(self.provider, "supports_tools", True)
         response = await self._generate_with_tool_loop(
             messages, system_prompt, user_id, use_tools=needs_tools
         )
@@ -407,7 +410,9 @@ class EveAgent:
         yield {"type": "routing", "complexity": complexity, "model": getattr(self.provider, 'model', route['model'])}
 
         # Eve Unleashed: ALWAYS enable tools — she's an agent, not a chatbot
-        needs_tools = not has_vision
+        # (unless the active provider has no native tool-calling loop, e.g. the
+        # single-shot Comfy Cloud Claude graph)
+        needs_tools = not has_vision and getattr(self.provider, "supports_tools", True)
 
         # Tool path: run loop as background task so activity updates can stream live
         if needs_tools:
@@ -1032,20 +1037,46 @@ class EveAgent:
                 api_key=self.settings.openai_api_key,
             )
 
-    # Model ids routed to the real Anthropic Messages API via set_model().
+    # Model ids that route through Comfy Cloud (COMFY_CLOUD_API_KEY) rather
+    # than a direct Anthropic key.
+    _COMFY_CLAUDE_MODEL_IDS = ("claude-sonnet-5-comfy",)
+    # Any other "claude-*" id is routed to the real Anthropic Messages API.
     _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 
     def set_model(self, model_id: str) -> bool:
         """Switch the active LLM provider/model for this agent at runtime.
 
-        Anthropic model ids (e.g. "claude-sonnet-5") are routed to a real
-        AnthropicProvider talking to the Anthropic Messages API directly —
-        keeping a cached instance so state/connections persist across
-        switches. Everything else goes through the shared Ollama instance,
-        same as before. Returns True if the switch took effect.
+        - "claude-sonnet-5-comfy" routes through Comfy Cloud's ClaudeNode
+          (COMFY_CLOUD_API_KEY) — same billing/auth as Eve's image pipeline,
+          no direct Anthropic key involved.
+        - Other "claude-*" ids route to a real AnthropicProvider talking to
+          the Anthropic Messages API directly (ANTHROPIC_API_KEY / Coding Plan).
+        - Everything else goes through the shared Ollama instance, same as
+          before.
+
+        Each backend keeps one cached provider instance so switching back
+        and forth doesn't tear down connections/state. Returns True if the
+        switch took effect.
         """
         if not model_id:
             return False
+
+        if model_id in self._COMFY_CLAUDE_MODEL_IDS:
+            if not self.settings.comfy_cloud_api_key:
+                logger.warning(
+                    f"Model '{model_id}' needs COMFY_CLOUD_API_KEY set — "
+                    f"staying on {self.provider.name if self.provider else 'no'} provider"
+                )
+                return False
+            if self._comfy_claude_provider is None:
+                from eve.brain.comfy_claude_provider import ComfyClaudeProvider
+                self._comfy_claude_provider = ComfyClaudeProvider(
+                    api_key=self.settings.comfy_cloud_api_key,
+                    base_url=self.settings.comfy_cloud_base_url,
+                )
+            self.provider = self._comfy_claude_provider
+            logger.info(f"Switched provider → comfy_claude ({model_id})")
+            return True
 
         if model_id.startswith(self._ANTHROPIC_MODEL_PREFIXES):
             if not (self.settings.coding_plan_api_key or self.settings.anthropic_api_key):

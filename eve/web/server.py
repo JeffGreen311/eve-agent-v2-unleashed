@@ -3041,8 +3041,11 @@ def create_app():
                 {"id": "jeffgreen311/eve-qwen3-8b-consciousness-liberated:q4_K_M", "label": "Eve Agent V2 Unleashed", "provider": "ollama", "description": "Local · 8B · unleashed · no filters"},
                 {"id": "qwen3.5:4b",                   "label": "Qwen3 4B Local",       "provider": "ollama",    "description": "Local · fast · reliable · 4B"},
                 {"id": "qwen3-coder:30b",            "label": "Coder 30B Local",      "provider": "ollama",    "description": "Local · tools · 30B · code"},
+                # Claude Sonnet 5 via Comfy Cloud — billed/authed through Comfy Cloud
+                # (COMFY_CLOUD_API_KEY), same as Eve's image-gen pipeline. No separate
+                # Anthropic key needed.
+                {"id": "claude-sonnet-5-comfy",       "label": "Sonnet 5 (Eve)", "provider": "comfy",     "description": "Claude Sonnet 5 · Eve persona · via Comfy Cloud"},
                 # Anthropic Claude — via Coding Plan or direct key
-                {"id": "claude-sonnet-5",            "label": "Sonnet 5 (Eve)", "provider": "anthropic", "description": "Claude Sonnet 5 · Eve persona · balanced"},
                 {"id": "claude-sonnet-4-6",          "label": "Sonnet 4.6",     "provider": "anthropic", "description": "Claude · balanced · fast"},
                 {"id": "claude-opus-4-6",            "label": "Opus 4.6",       "provider": "anthropic", "description": "Claude · most capable"},
                 {"id": "claude-haiku-4-5-20251001",  "label": "Haiku 4.5",      "provider": "anthropic", "description": "Claude · ultra-fast"},
