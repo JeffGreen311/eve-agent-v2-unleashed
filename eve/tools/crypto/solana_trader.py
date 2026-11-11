@@ -10,6 +10,8 @@ from typing import Optional
 
 import aiohttp
 
+from eve.tools.crypto.solana_presign_guard import PreSignGuard
+
 logger = logging.getLogger(__name__)
 
 # Common Solana token mint addresses
@@ -138,6 +140,22 @@ class SolanaTrader:
 
         quote = await self.get_quote(in_mint, out_mint, amount_lamports, slippage_bps)
         swap_tx_b64 = await self.get_swap_transaction(quote, public_key)
+
+        # Local pre-sign guard (Issue #14): simulate the unsigned tx and
+        # compare the wallet's balance changes against the quote BEFORE
+        # signing. Raises PreSignCheckFailed on any mismatch -- nothing is
+        # signed and nothing is broadcast.
+        guard = PreSignGuard(rpc_url=self.SOLANA_RPC)
+        report = await guard.verify(
+            tx_b64=swap_tx_b64,
+            quote=quote,
+            wallet_pubkey=public_key,
+            input_mint=in_mint,
+            output_mint=out_mint,
+            amount_lamports=amount_lamports,
+            priority_fee_lamports=priority_fee_lamports,
+        )
+        logger.info(f"Pre-sign check passed: {report.summary()}")
 
         # Decode → deserialize → sign → re-serialize
         raw_bytes = base64.b64decode(swap_tx_b64)
